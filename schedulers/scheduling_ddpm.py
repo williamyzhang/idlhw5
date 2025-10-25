@@ -183,19 +183,19 @@ class DDPMScheduler(nn.Module):
         timesteps = timesteps.to(original_samples.device)
         
         # TODO: get sqrt alphas
-        sqrt_alpha_prod = None 
-        sqrt_alpha_prod = None 
+        sqrt_alpha_prod = alphas_cumprod[timesteps] ** 0.5 
+        sqrt_alpha_prod = sqrt_alpha_prod.flatten() 
         while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
             sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
             
-        # TODO: get sqrt one miucs alphas
-        sqrt_one_minus_alpha_prod = None 
-        sqrt_one_minus_alpha_prod = None 
+        # TODO: get sqrt one minus alphas
+        sqrt_one_minus_alpha_prod = (1 - alphas_cumprod[timesteps]) ** 0.5
+        sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
         
         # TODO: add noise to the original samples using the formula (14) from https://arxiv.org/pdf/2006.11239.pdf
-        noisy_samples = None 
+        noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
         return noisy_samples
     
     
@@ -230,17 +230,17 @@ class DDPMScheduler(nn.Module):
         prev_t = self.previous_timestep(t)
         
         # TODO: 1. compute alphas, betas
-        alpha_prod_t = None 
-        alpha_prod_t_prev = None 
-        beta_prod_t = None 
-        beta_prod_t_prev = None 
-        current_alpha_t = None 
-        current_beta_t = None 
+        alpha_prod_t = self.alphas_cumprod[t]
+        alpha_prod_t_prev = self.alphas_cumprod[prev_t] if prev_t >= 0 else 1.0
+        beta_prod_t = 1 - alpha_prod_t
+        beta_prod_t_prev = 1 - alpha_prod_t_prev
+        current_alpha_t = alpha_prod_t / alpha_prod_t_prev
+        current_beta_t = 1 - current_alpha_t
         
         # TODO: 2. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (15) from https://arxiv.org/pdf/2006.11239.pdf
         if self.prediction_type == 'epsilon':
-            pred_original_sample = None 
+            pred_original_sample = (sample - beta_prod_t ** 0.5 * model_output) / alpha_prod_t ** 0.5 
         else:
             raise NotImplementedError(f"Prediction type {self.prediction_type} not implemented.")
 
@@ -252,12 +252,12 @@ class DDPMScheduler(nn.Module):
 
         # TODO: 4. Compute coefficients for pred_original_sample x_0 and current sample x_t
         # See formula (7) from https://arxiv.org/pdf/2006.11239.pdf
-        pred_original_sample_coeff = None 
-        current_sample_coeff = None 
+        pred_original_sample_coeff = (alpha_prod_t_prev ** 0.5 * current_beta_t) / beta_prod_t 
+        current_sample_coeff = (current_alpha_t ** 0.5 * beta_prod_t_prev) / beta_prod_t 
 
         # 5. Compute predicted previous sample µ_t
         # See formula (7) from https://arxiv.org/pdf/2006.11239.pdf
-        pred_prev_sample = None 
+        pred_prev_sample = pred_original_sample_coeff * pred_original_sample + current_sample_coeff * sample 
 
 
         # 6. Add noise
@@ -268,9 +268,9 @@ class DDPMScheduler(nn.Module):
                 model_output.shape, generator=generator, device=device, dtype=model_output.dtype
             )
             # TODO: use self,get_variance and variance_noise
-            variance = None 
+            variance = (self._get_variance(t) ** 0.5) * variance_noise 
         
         # TODO: add variance to prev_sample
-        pred_prev_sample = None 
-        
+        pred_prev_sample = pred_prev_sample + variance
+
         return pred_prev_sample
