@@ -44,6 +44,7 @@ class DDPMScheduler(nn.Module):
         if self.beta_schedule == 'linear':
             # This is the DDPM implementation
             betas = torch.linspace(beta_start, beta_end, num_train_timesteps, dtype=torch.float32)
+            # In the paper it is made to grow linearly from 𝛽1 = 10−4 to 𝛽𝑇 = 0.02 for 𝑇 = 1000
         self.register_buffer("betas", betas)
          
         # TODO: calculate alphas
@@ -130,25 +131,27 @@ class DDPMScheduler(nn.Module):
         # TODO: For t > 0, compute predicted variance $\beta_t$ (see formula (6) and (7) from https://arxiv.org/pdf/2006.11239.pdf)
         # and sample from it to get previous sample
         # x_{t-1} ~ N(pred_prev_sample, variance) == add variance to pred_sample
+        # Formula: β̃_t = (1 - ᾱ_{t-1}) / (1 - ᾱ_t) * β_t
         variance = (1 - alpha_prod_t_prev) / (1 - alpha_prod_t) * current_beta_t
 
         # we always take the log of variance, so clamp it to ensure it's not 0
         variance = torch.clamp(variance, min=1e-20)
 
         # TODO: we start with two types of variance as mentioned in Section 3.2 of https://arxiv.org/pdf/2006.11239.pdf
-        # 1. fixed_small: $\sigma_t = \beta_t$, this one is optimal for $x_0$ being deterministic
-        # 2. fixed_large: $\sigma_t^2 = \beta$, this one is optimal for $x_0 \sim mathcal{N}(0, 1)$
+        # 1. fixed_small: $\sigma_t = \beta_tilde_t$, this one is optimal for $x_0$ being deterministic
+        # 2. fixed_large: $\sigma_t^2 = \beta_t$, this one is optimal for $x_0 \sim mathcal{N}(0, 1)$
         if self.variance_type == "fixed_small":
             # TODO: fixed small variance
-            variance = current_beta_t 
+            # variance = variance
+            # already computed above
+            pass
         elif self.variance_type == "fixed_large":
             # TODO: fixed large variance
-            variance = (1 - alpha_prod_t_prev) / (1 - alpha_prod_t) * current_beta_t
+            variance = current_beta_t
+
             # TODO: small hack: set the initial (log-)variance like so to get a better decoder log likelihood.
-            # if t == 1:
-            #     variance = variance
-            if prev_t < 0:  # When computing variance for the final step to x_0
-                variance = current_beta_t  # Use β_0 instead of β̃_0 = 0
+            if t == 1:
+                variance = variance
         else:
             raise NotImplementedError(f"Variance type {self.variance_type} not implemented.")
 
@@ -182,14 +185,17 @@ class DDPMScheduler(nn.Module):
         alphas_cumprod = self.alphas_cumprod.to(dtype=original_samples.dtype)
         timesteps = timesteps.to(original_samples.device)
         
+        # nice property of forward process w/ reparametrization trick: https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
+        # -> q(xt|x0) = N (xt; √α¯tx0,(1 − α¯t)I)
+
         # TODO: get sqrt alphas
-        sqrt_alpha_prod = alphas_cumprod[timesteps] ** 0.5 
+        sqrt_alpha_prod = np.sqrt(alphas_cumprod[timesteps])
         sqrt_alpha_prod = sqrt_alpha_prod.flatten() 
         while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
             sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
             
         # TODO: get sqrt one minus alphas
-        sqrt_one_minus_alpha_prod = (1 - alphas_cumprod[timesteps]) ** 0.5
+        sqrt_one_minus_alpha_prod = np.sqrt(1 - alphas_cumprod[timesteps])
         sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
@@ -240,7 +246,7 @@ class DDPMScheduler(nn.Module):
         # TODO: 2. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (15) from https://arxiv.org/pdf/2006.11239.pdf
         if self.prediction_type == 'epsilon':
-            pred_original_sample = (sample - beta_prod_t ** 0.5 * model_output) / alpha_prod_t ** 0.5 
+            pred_original_sample = (sample - np.sqrt(beta_prod_t) * model_output) / np.sqrt(alpha_prod_t)
         else:
             raise NotImplementedError(f"Prediction type {self.prediction_type} not implemented.")
 
