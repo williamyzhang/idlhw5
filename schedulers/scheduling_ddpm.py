@@ -189,13 +189,13 @@ class DDPMScheduler(nn.Module):
         # -> q(xt|x0) = N (xt; √α¯tx0,(1 − α¯t)I)
 
         # TODO: get sqrt alphas
-        sqrt_alpha_prod = np.sqrt(alphas_cumprod[timesteps])
+        sqrt_alpha_prod = torch.sqrt(alphas_cumprod[timesteps])
         sqrt_alpha_prod = sqrt_alpha_prod.flatten() 
         while len(sqrt_alpha_prod.shape) < len(original_samples.shape):
             sqrt_alpha_prod = sqrt_alpha_prod.unsqueeze(-1)
             
         # TODO: get sqrt one minus alphas
-        sqrt_one_minus_alpha_prod = np.sqrt(1 - alphas_cumprod[timesteps])
+        sqrt_one_minus_alpha_prod = torch.sqrt(1 - alphas_cumprod[timesteps])
         sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.flatten()
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
@@ -246,7 +246,7 @@ class DDPMScheduler(nn.Module):
         # TODO: 2. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (15) from https://arxiv.org/pdf/2006.11239.pdf
         if self.prediction_type == 'epsilon':
-            pred_original_sample = (sample - np.sqrt(beta_prod_t) * model_output) / np.sqrt(alpha_prod_t)
+            pred_original_sample = (sample - torch.sqrt(beta_prod_t) * model_output) / torch.sqrt(alpha_prod_t)
         else:
             raise NotImplementedError(f"Prediction type {self.prediction_type} not implemented.")
 
@@ -258,8 +258,8 @@ class DDPMScheduler(nn.Module):
 
         # TODO: 4. Compute coefficients for pred_original_sample x_0 and current sample x_t
         # See formula (7) from https://arxiv.org/pdf/2006.11239.pdf
-        pred_original_sample_coeff = (alpha_prod_t_prev ** 0.5 * current_beta_t) / beta_prod_t 
-        current_sample_coeff = (current_alpha_t ** 0.5 * beta_prod_t_prev) / beta_prod_t 
+        pred_original_sample_coeff = (torch.sqrt(alpha_prod_t_prev) * current_beta_t) / beta_prod_t 
+        current_sample_coeff = (torch.sqrt(current_alpha_t) * beta_prod_t_prev) / beta_prod_t 
 
         # 5. Compute predicted previous sample µ_t
         # See formula (7) from https://arxiv.org/pdf/2006.11239.pdf
@@ -274,7 +274,7 @@ class DDPMScheduler(nn.Module):
                 model_output.shape, generator=generator, device=device, dtype=model_output.dtype
             )
             # TODO: use self,get_variance and variance_noise
-            variance = (self._get_variance(t) ** 0.5) * variance_noise 
+            variance = torch.sqrt(self._get_variance(t)) * variance_noise
         
         # TODO: add variance to prev_sample
         pred_prev_sample = pred_prev_sample + variance
