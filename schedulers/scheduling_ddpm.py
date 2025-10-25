@@ -150,8 +150,10 @@ class DDPMScheduler(nn.Module):
             variance = current_beta_t
 
             # TODO: small hack: set the initial (log-)variance like so to get a better decoder log likelihood.
-            if t == 1:
-                variance = variance
+            # if t == 1:
+            #     variance = variance
+            if t == 0: # zero indexing
+                variance = (1 - alpha_prod_t_prev) / (1 - alpha_prod_t) * current_beta_t
         else:
             raise NotImplementedError(f"Variance type {self.variance_type} not implemented.")
 
