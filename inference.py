@@ -30,8 +30,6 @@ def main():
     
     # seed everything
     seed_everything(args.seed)
-    generator = torch.Generator(device=device)
-    generator.manual_seed(args.seed)
     
     # setup logging
     logging.basicConfig(
@@ -42,7 +40,9 @@ def main():
 
     # device    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+    generator = torch.Generator(device=device)
+    generator.manual_seed(args.seed)
+
     # setup model
     logger.info("Creating model")
     # unet

@@ -428,8 +428,8 @@ def main():
             wandb_logger.log({'gen_images': wandb.Image(grid_image)})
             
         # save checkpoint
-        if is_primary(args):
-            save_checkpoint(unet_wo_ddp, scheduler_wo_ddp, vae_wo_ddp, class_embedder, optimizer, epoch, save_dir=save_dir)
+        # if is_primary(args):
+        #     save_checkpoint(unet_wo_ddp, scheduler_wo_ddp, vae_wo_ddp, class_embedder, optimizer, epoch, save_dir=save_dir)
 
 
 if __name__ == '__main__':
