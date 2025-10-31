@@ -51,7 +51,7 @@ def save_checkpoint(unet, scheduler, vae=None, class_embedder=None, optimizer=No
     print(f"Checkpoint saved at {checkpoint_path}")
     
     # Manage checkpoint history
-    manage_checkpoints(save_dir, keep_last_n=10)
+    manage_checkpoints(save_dir, keep_last_n=5)
 
 
 def manage_checkpoints(save_dir, keep_last_n=10):

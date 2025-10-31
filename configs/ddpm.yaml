@@ -6,7 +6,7 @@ batch_size: 128
 num_workers: 4
 num_classes: 10
 num_epochs: 20
-learning_rate: 0.001
+learning_rate: 0.0005
 weight_decay: 0.01
 num_train_timesteps: 1000
 num_inference_steps: 250
