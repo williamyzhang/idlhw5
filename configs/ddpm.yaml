@@ -28,3 +28,5 @@ unet_dropout: 0.1
 use_cfg: false
 latent_ddpm: false
 use_ddim: false
+
+use_cifar10: true

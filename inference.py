@@ -12,6 +12,7 @@ from PIL import Image
 import torch.nn.functional as F
 
 from torchvision.utils  import make_grid
+from torchvision import datasets
 
 from models import UNet, VAE, ClassEmbedder
 from schedulers import DDPMScheduler, DDIMScheduler
@@ -38,8 +39,8 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
-    
-    # device
+
+    # device    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # setup model
@@ -114,9 +115,9 @@ def main():
             all_images.append(gen_images)
     else:
         # generate 5000 images
-        for _ in tqdm(range(0, 5000, batch_size)):
+        for _ in tqdm(range(0, 5000, args.batch_size)):
             gen_images = pipeline(
-                batch_size=batch_size,
+                batch_size=args.batch_size,
                 num_inference_steps=args.num_inference_steps,
                 generator=generator,
                 device=device, 
@@ -124,18 +125,46 @@ def main():
             all_images.append(gen_images)
     
     # TODO: load validation images as reference batch
-    # val_images = 
-    
+    if args.use_cifar10:
+        val_dataset = datasets.CIFAR10(root='./', train=False, download=False)
+    else:
+        val_dataset = datasets.ImageFolder(root=args.data_dir)
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+    )
+    val_images = []
+    for batch in val_loader:
+        if isinstance(batch, (list, tuple)):
+            images = batch[0]
+        else:
+            images = batch
+        val_images.append(images)
+        if len(val_images) * args.batch_size >= 5000:
+            break
+    val_images = torch.cat(val_images, dim=0)[:5000]
+    val_images = (val_images + 1) / 2  # rescale to [0, 1]
+
     # TODO: using torchmetrics for evaluation, check the documents of torchmetrics
     import torchmetrics 
     
     from torchmetrics.image.fid import FrechetInceptionDistance, InceptionScore
     
     # TODO: compute FID and IS
-    
-        
-    
+    fid_metric = FrechetInceptionDistance(feature=2048).to(device)
+    is_metric = InceptionScore().to(device)
 
+    for images in tqdm(all_images):
+        fid_metric.update(images, real=False)
+        is_metric.update(images)
+
+    fid = fid_metric.compute()
+    is_score = is_metric.compute()
+
+    logger.info(f"FID: {fid:.2f}")
+    logger.info(f"IS: {is_score:.2f}")
 
 if __name__ == '__main__':
     main()

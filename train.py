@@ -75,6 +75,9 @@ def parse_args():
     
     # ddim sampler for inference
     parser.add_argument("--use_ddim", type=str2bool, default=False, help="use ddim sampler for inference")
+
+    # use cifar10
+    parser.add_argument("--use_cifar10", type=str2bool, default=False, help="use cifar10 for training")
     
     # checkpoint path for inference
     parser.add_argument("--ckpt", type=str, default=None, help="checkpoint path for inference")
@@ -128,11 +131,14 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
-    # TOOD: use image folder for your train dataset
-    train_dataset =  datasets.ImageFolder(root=args.data_dir, transform=transform)
-    
+    # TODO: use image folder for your train dataset
+    if args.use_cifar10:
+        train_dataset = datasets.CIFAR10(root='./', train=True, transform=transform, download=False)
+    else:
+        train_dataset =  datasets.ImageFolder(root=args.data_dir, transform=transform)
+
     # TODO: setup dataloader
-    sampler = None 
+    sampler = None
     if args.distributed:
         # TODO: distributed sampler
         sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=args.world_size, rank=args.rank) 
@@ -299,13 +305,13 @@ def main():
         
         
         # TODO: finish this
-        for step, (None, labels) in enumerate(train_loader):
+        for step, (images, labels) in enumerate(train_loader):
             
             batch_size = images.size(0)
             
             # TODO: send to device
-            images = None 
-            labels = None 
+            images = images.to(device)
+            labels = labels.to(device)
             
             
             # NOTE: this is for latent DDPM 
@@ -316,7 +322,7 @@ def main():
                 images = images * 0.1845
             
             # TODO: zero grad optimizer
-            
+            optimizer.zero_grad()
             
             # NOTE: this is for CFG
             if class_embedder is not None:
@@ -327,22 +333,22 @@ def main():
                 class_emb = None
             
             # TODO: sample noise 
-            noise = None  
+            noise = torch.randn_like(images)
             
             # TODO: sample timestep t
-            timesteps = None 
-            
+            timesteps = torch.randint(0, args.num_train_timesteps, (batch_size,), device=device).long()
+
             # TODO: add noise to images using scheduler
-            noisy_images = None 
+            noisy_images = scheduler.add_noise(images, noise, timesteps)
             
             # TODO: model prediction
-            model_pred = None 
-            
+            model_pred = unet(noisy_images, timesteps, class_emb)
+
             if args.prediction_type == 'epsilon':
                 target = noise 
             
             # TODO: calculate loss
-            loss = None 
+            loss = F.mse_loss(model_pred, target)
             
             # record loss
             loss_m.update(loss.item())
@@ -351,10 +357,10 @@ def main():
             loss.backward()
             # TODO: grad clip
             if args.grad_clip:
-                pass 
+                torch.nn.utils.clip_grad_norm_(unet.parameters(), args.grad_clip)
             
             # TODO: step your optimizer
-            optimizer
+            optimizer.step()
             
             progress_bar.update(1)
             
