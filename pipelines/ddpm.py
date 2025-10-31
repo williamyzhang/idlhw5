@@ -121,9 +121,10 @@ class DDPMPipeline:
         # TODO: use VQVAE to get final image
         if self.vae is not None:
             # NOTE: remember to rescale your images
-            image = None 
+            image = image * 2 - 1 
+            image = self.vae.decode(image)
             # TODO: clamp your images values
-            image = None 
+            image = image.clamp(-1, 1)
         
         # TODO: return final image, re-scale to [0, 1]
         image = (image / 2 + 0.5).clamp(0, 1) 

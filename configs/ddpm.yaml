@@ -13,6 +13,7 @@ num_inference_steps: #INFERENCE_TIMESTEPS
 beta_start: #BETA START
 beta_end: #BETA END
 beta_schedule: #BETA SCHEDULE
+latent_ddpm: false
 
 variance_type: fixed_small
 predictor_type: epsilon

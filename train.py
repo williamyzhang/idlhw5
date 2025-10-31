@@ -124,19 +124,28 @@ def main():
     logger.info("Creating dataset")
     # TODO: use transform to normalize your images to [-1, 1]
     # TODO: you can also use horizontal flip
-    transform = None 
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    ])
     # TOOD: use image folder for your train dataset
-    train_dataset = None 
+    train_dataset =  datasets.ImageFolder(root=args.data_dir, transform=transform)
     
     # TODO: setup dataloader
     sampler = None 
     if args.distributed:
         # TODO: distributed sampler
-        sampler =None 
+        sampler = torch.utils.data.distributed.DistributedSampler(train_dataset, num_replicas=args.world_size, rank=args.rank) 
     # TODO: shuffle
     shuffle = False if sampler else True
     # TODO dataloader
-    train_loader = None 
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=shuffle,
+        sampler=sampler,
+        num_workers=args.num_workers
+    ) 
     
     # calculate total batch_size
     total_batch_size = args.batch_size * args.world_size 
@@ -163,7 +172,17 @@ def main():
     logger.info(f"Number of parameters: {num_params / 10 ** 6:.2f}M")
     
     # TODO: ddpm shceduler
-    scheduler = DDPMScheduler(None)
+    scheduler = DDPMScheduler(
+        num_train_timesteps=args.num_train_timesteps,
+        num_inference_steps=args.num_inference_steps,
+        beta_start=args.beta_start,
+        beta_end=args.beta_end,
+        beta_schedule=args.beta_schedule,
+        variance_type=args.variance_type,
+        prediction_type=args.prediction_type,
+        clip_sample=args.clip_sample,
+        clip_sample_range=args.clip_sample_range
+    )
     
     # NOTE: this is for latent DDPM 
     vae = None
@@ -186,16 +205,17 @@ def main():
         vae = vae.to(device)
     if class_embedder:
         class_embedder = class_embedder.to(device)
-    
-    # TODO: setup optimizer
-    optimizer = None 
-    # TODO: setup scheduler
-    scheduler = None 
-    
+
     # max train steps
     num_update_steps_per_epoch = len(train_loader)
     args.max_train_steps = args.num_epochs * num_update_steps_per_epoch
     
+    # TODO: setup optimizer
+    optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    # TODO: setup scheduler
+    # Note: not sure what scheduler to set up here
+    # scheduler = None
+
     #  setup distributed training
     if args.distributed:
         unet = torch.nn.parallel.DistributedDataParallel(
@@ -211,13 +231,23 @@ def main():
     vae_wo_ddp = vae
     # TODO: setup ddim
     if args.use_ddim:
-        scheduler_wo_ddp = DDIMScheduler(None)
+        scheduler_wo_ddp = DDIMScheduler(
+            num_train_timesteps=args.num_train_timesteps,
+            num_inference_steps=args.num_inference_steps,
+            beta_start=args.beta_start,
+            beta_end=args.beta_end,
+            beta_schedule=args.beta_schedule,
+            variance_type=args.variance_type,
+            prediction_type=args.prediction_type,
+            clip_sample=args.clip_sample,
+            clip_sample_range=args.clip_sample_range
+        )
     else:
         scheduler_wo_ddp = scheduler
     
     # TODO: setup evaluation pipeline
     # NOTE: this pipeline is not differentiable and only for evaluatin
-    pipeline = DDPMPipeline(None)
+    pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp, class_embedder=class_embedder_wo_ddp)
     
     
     # dump config file
@@ -264,8 +294,8 @@ def main():
         loss_m = AverageMeter()
         
         # TODO: set unet and scheduelr to train
-        unet
-        scheduler 
+        unet = unet.train()
+        scheduler = scheduler.train()
         
         
         # TODO: finish this
@@ -281,7 +311,7 @@ def main():
             # NOTE: this is for latent DDPM 
             if vae is not None:
                 # use vae to encode images as latents
-                images = None 
+                images = vae.encode(images) 
                 # NOTE: do not change  this line, this is to ensure the latent has unit std
                 images = images * 0.1845
             
