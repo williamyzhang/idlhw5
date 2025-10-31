@@ -101,7 +101,11 @@ def main():
     
     # parse arguments
     args = parse_args()
-    
+
+    print('Training ddpm with the following config:')
+    for key, value in vars(args).items():
+        print(f"  {key}: {value}")
+
     # seed everything
     seed_everything(args.seed)
     
@@ -253,9 +257,12 @@ def main():
     
     # TODO: setup evaluation pipeline
     # NOTE: this pipeline is not differentiable and only for evaluatin
-    pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp, class_embedder=class_embedder_wo_ddp)
-    
-    
+    if args.use_cfg:
+        pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp, class_embedder=class_embedder_wo_ddp)
+    else:
+        print('No CFG evaluation pipeline')
+        pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp)
+
     # dump config file
     if is_primary(args):
         experiment_config = vars(args)

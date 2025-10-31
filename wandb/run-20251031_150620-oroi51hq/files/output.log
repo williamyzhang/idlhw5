@@ -1,0 +1,59 @@
+10/31/2025 15:06:21 - INFO - __main__ - ***** Training arguments *****
+10/31/2025 15:06:21 - INFO - __main__ - Namespace(config='configs/ddpm.yaml', data_dir='./data', image_size=128, batch_size=32, num_workers=4, num_classes=100, run_name='exp-1-ddpm', output_dir='experiments', num_epochs=20, learning_rate=0.001, weight_decay=0.01, grad_clip=1.0, seed=42, mixed_precision='none', num_train_timesteps=1000, num_inference_steps=250, beta_start=0.0001, beta_end=0.02, beta_schedule='linear', variance_type='fixed_small', prediction_type='epsilon', clip_sample=True, clip_sample_range=1.0, unet_in_size=128, unet_in_ch=3, unet_ch=128, unet_ch_mult=[1, 2, 2, 4], unet_attn=[2, 3], unet_num_res_blocks=2, unet_dropout=0.1, latent_ddpm=False, use_cfg=False, cfg_guidance_scale=2.0, use_ddim=False, use_cifar10=True, ckpt=None, distributed=False, world_size=1, rank=0, local_rank=0, device='cuda', total_batch_size=32, max_train_steps=31260)
+10/31/2025 15:06:21 - INFO - __main__ - ***** Running training *****
+10/31/2025 15:06:21 - INFO - __main__ -   Num examples = 50000
+10/31/2025 15:06:21 - INFO - __main__ -   Num Epochs = 20
+10/31/2025 15:06:21 - INFO - __main__ -   Instantaneous batch size per device = 32
+10/31/2025 15:06:21 - INFO - __main__ -   Total train batch size (w. parallel, distributed & accumulation) = 32
+10/31/2025 15:06:21 - INFO - __main__ -   Total optimization steps per epoch 1563
+10/31/2025 15:06:21 - INFO - __main__ -   Total optimization steps = 31260
+  0%|                                                                       | 0/31260 [00:00<?, ?it/s]10/31/2025 15:06:21 - INFO - __main__ - Epoch 1/20
+  0%|                                                             | 1/31260 [00:00<5:27:03,  1.59it/s]10/31/2025 15:06:22 - INFO - __main__ - Epoch 1/20, Step 0/1563, Loss 0.995053768157959 (0.995053768157959)
+  0%|▏                                                            | 101/31260 [00:11<58:29,  8.88it/s]10/31/2025 15:06:33 - INFO - __main__ - Epoch 1/20, Step 100/1563, Loss 1.008821725845337 (1.0002896998188284)
+  1%|▍                                                            | 201/31260 [00:23<58:12,  8.89it/s]10/31/2025 15:06:44 - INFO - __main__ - Epoch 1/20, Step 200/1563, Loss 0.9842574000358582 (0.9975777152758926)
+  1%|▌                                                            | 301/31260 [00:34<57:58,  8.90it/s]10/31/2025 15:06:56 - INFO - __main__ - Epoch 1/20, Step 300/1563, Loss 0.9208396673202515 (0.9829938611714943)
+  1%|▊                                                            | 401/31260 [00:45<57:50,  8.89it/s]10/31/2025 15:07:07 - INFO - __main__ - Epoch 1/20, Step 400/1563, Loss 0.6811303496360779 (0.9336735747401553)
+  2%|▉                                                            | 501/31260 [00:56<57:38,  8.89it/s]10/31/2025 15:07:18 - INFO - __main__ - Epoch 1/20, Step 500/1563, Loss 1.004291296005249 (0.9469550056847745)
+  2%|█▏                                                           | 601/31260 [01:08<57:33,  8.88it/s]10/31/2025 15:07:29 - INFO - __main__ - Epoch 1/20, Step 600/1563, Loss 0.9984250068664551 (0.9556278495145916)
+  2%|█▎                                                           | 701/31260 [01:19<57:18,  8.89it/s]10/31/2025 15:07:41 - INFO - __main__ - Epoch 1/20, Step 700/1563, Loss 0.9984750151634216 (0.9616565592108711)
+  3%|█▌                                                           | 801/31260 [01:30<57:10,  8.88it/s]10/31/2025 15:07:52 - INFO - __main__ - Epoch 1/20, Step 800/1563, Loss 0.9914400577545166 (0.9660994311545821)
+  3%|█▊                                                           | 901/31260 [01:41<56:55,  8.89it/s]10/31/2025 15:08:03 - INFO - __main__ - Epoch 1/20, Step 900/1563, Loss 0.999503493309021 (0.9694360166490409)
+  3%|█▉                                                          | 1001/31260 [01:53<56:43,  8.89it/s]10/31/2025 15:08:14 - INFO - __main__ - Epoch 1/20, Step 1000/1563, Loss 0.9937371015548706 (0.9720950491063959)
+  4%|██                                                          | 1101/31260 [02:04<56:31,  8.89it/s]10/31/2025 15:08:26 - INFO - __main__ - Epoch 1/20, Step 1100/1563, Loss 0.9955356121063232 (0.9743111974861707)
+  4%|██▎                                                         | 1201/31260 [02:15<56:22,  8.89it/s]10/31/2025 15:08:37 - INFO - __main__ - Epoch 1/20, Step 1200/1563, Loss 0.9941467046737671 (0.9760952663362076)
+  4%|██▍                                                         | 1301/31260 [02:27<56:11,  8.88it/s]10/31/2025 15:08:48 - INFO - __main__ - Epoch 1/20, Step 1300/1563, Loss 0.9959790110588074 (0.9775019727423959)
+  4%|██▋                                                         | 1401/31260 [02:38<55:59,  8.89it/s]10/31/2025 15:08:59 - INFO - __main__ - Epoch 1/20, Step 1400/1563, Loss 0.9979453086853027 (0.9785661186429963)
+  5%|██▉                                                         | 1501/31260 [02:49<55:52,  8.88it/s]10/31/2025 15:09:11 - INFO - __main__ - Epoch 1/20, Step 1500/1563, Loss 0.9896637797355652 (0.9794505702345312)
+  5%|██▉                                                       | 1563/31260 [02:56<1:03:15,  7.82it/s]Traceback (most recent call last):
+  File "/jet/home/wzhang31/hw5_student_starter_code/train.py", line 409, in <module>
+    main()
+  File "/jet/home/wzhang31/hw5_student_starter_code/train.py", line 389, in main
+    gen_images = pipeline(None)
+  File "/ocean/projects/cis250019p/mzhang23/TA/HW2P2/envs/hw2p2_env/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/jet/home/wzhang31/hw5_student_starter_code/pipelines/ddpm.py", line 90, in __call__
+    image = randn_tensor(image_shape, generator=generator, device=device)
+  File "/jet/home/wzhang31/hw5_student_starter_code/utils/misc.py", line 57, in randn_tensor
+    latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype, layout=layout).to(device)
+TypeError: randn() received an invalid combination of arguments - got (tuple, layout=torch.layout, dtype=NoneType, device=torch.device, generator=NoneType), but expected one of:
+ * (tuple of ints size, *, torch.Generator generator, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, torch.Generator generator, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+
+Traceback (most recent call last):
+  File "/jet/home/wzhang31/hw5_student_starter_code/train.py", line 409, in <module>
+    main()
+  File "/jet/home/wzhang31/hw5_student_starter_code/train.py", line 389, in main
+    gen_images = pipeline(None)
+  File "/ocean/projects/cis250019p/mzhang23/TA/HW2P2/envs/hw2p2_env/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/jet/home/wzhang31/hw5_student_starter_code/pipelines/ddpm.py", line 90, in __call__
+    image = randn_tensor(image_shape, generator=generator, device=device)
+  File "/jet/home/wzhang31/hw5_student_starter_code/utils/misc.py", line 57, in randn_tensor
+    latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype, layout=layout).to(device)
+TypeError: randn() received an invalid combination of arguments - got (tuple, layout=torch.layout, dtype=NoneType, device=torch.device, generator=NoneType), but expected one of:
+ * (tuple of ints size, *, torch.Generator generator, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, torch.Generator generator, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, Tensor out = None, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
+ * (tuple of ints size, *, tuple of names names, torch.dtype dtype = None, torch.layout layout = None, torch.device device = None, bool pin_memory = False, bool requires_grad = False)
