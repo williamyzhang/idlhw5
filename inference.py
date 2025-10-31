@@ -51,7 +51,14 @@ def main():
     logger.info(f"Number of parameters: {num_params / 10 ** 6:.2f}M")
     
     # TODO: ddpm shceduler
-    scheduler = DDPMScheduler(None )
+    scheduler = DDPMScheduler(
+        num_train_timesteps=args.num_train_timesteps,
+        beta_start=args.beta_start,
+        beta_end=args.beta_end,
+        beta_schedule=args.beta_schedule,
+        variance_type=args.variance_type,
+        prediction_type=args.prediction_type,
+     )
     # vae 
     vae = None
     if args.latent_ddpm:        
@@ -74,17 +81,22 @@ def main():
         
     # scheduler
     if args.use_ddim:
-        shceduler_class = DDIMScheduler
+        scheduler_class = DDIMScheduler
     else:
-        shceduler_class = DDPMScheduler
-    # TOOD: scheduler
-    scheduler = shceduler_class(None)
+        scheduler_class = DDPMScheduler
+    # TODO: scheduler
+    # scheduler = scheduler_class(None)
 
     # load checkpoint
     load_checkpoint(unet, scheduler, vae=vae, class_embedder=class_embedder, checkpoint_path=args.ckpt)
     
     # TODO: pipeline
-    pipeline = DDPMPipeline(None)
+    pipeline = DDPMPipeline(
+        unet=unet,
+        scheduler=scheduler,
+        vae=vae,
+        class_embedder=class_embedder,
+    )
 
     
     logger.info("***** Running Infrence *****")
@@ -103,11 +115,16 @@ def main():
     else:
         # generate 5000 images
         for _ in tqdm(range(0, 5000, batch_size)):
-            gen_images = None 
+            gen_images = pipeline(
+                batch_size=batch_size,
+                num_inference_steps=args.num_inference_steps,
+                generator=generator,
+                device=device, 
+            )
             all_images.append(gen_images)
     
     # TODO: load validation images as reference batch
-    
+    # val_images = 
     
     # TODO: using torchmetrics for evaluation, check the documents of torchmetrics
     import torchmetrics 
