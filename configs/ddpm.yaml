@@ -24,8 +24,4 @@ unet_ch_mult: [1, 2, 2, 4]
 unet_attn: [2, 3]
 unet_dropout: 0.1
 
-use_cfg: False
-latent_ddpm: False
-use_ddim: False
-
 use_cifar10: True

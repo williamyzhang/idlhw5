@@ -102,9 +102,9 @@ def main():
     # parse arguments
     args = parse_args()
 
-    print('Training ddpm with the following config:')
-    for key, value in vars(args).items():
-        print(f"  {key}: {value}")
+    # print('Training ddpm with the following config:')
+    # for key, value in vars(args).items():
+    #     print(f"  {key}: {value}")
 
     # seed everything
     seed_everything(args.seed)
@@ -137,6 +137,7 @@ def main():
     ])
     # TODO: use image folder for your train dataset
     if args.use_cifar10:
+        print('Using CIFAR10 dataset for training')
         train_dataset = datasets.CIFAR10(root='./', train=True, transform=transform, download=False)
     else:
         train_dataset =  datasets.ImageFolder(root=args.data_dir, transform=transform)
@@ -197,6 +198,7 @@ def main():
     # NOTE: this is for latent DDPM 
     vae = None
     if args.latent_ddpm:
+        print('Using VAE for latent DDPM')
         vae = VAE()
         # NOTE: do not change this
         vae.init_from_ckpt('pretrained/model.ckpt')
@@ -205,6 +207,7 @@ def main():
     # Note: this is for cfg
     class_embedder = None
     if args.use_cfg:
+        print('Using Class Embedder for CFG')
         # TODO: 
         class_embedder = ClassEmbedder(None)
         
@@ -241,6 +244,7 @@ def main():
     vae_wo_ddp = vae
     # TODO: setup ddim
     if args.use_ddim:
+        print('Using DDIM for training')
         scheduler_wo_ddp = DDIMScheduler(
             num_train_timesteps=args.num_train_timesteps,
             num_inference_steps=args.num_inference_steps,
@@ -262,6 +266,18 @@ def main():
     else:
         print('No CFG evaluation pipeline')
         pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp)
+
+    ## pipeline test
+    # print('Testing pipeline call...')
+    # generator = torch.Generator(device=device)
+    # generator.manual_seed(args.seed)
+    # gen_images = pipeline(
+    #         batch_size = args.batch_size,
+    #         num_inference_steps = args.num_inference_steps,
+    #         guidance_scale=None,
+    #         generator=generator,
+    #         device = device,
+    #     ) 
 
     # dump config file
     if is_primary(args):
@@ -390,7 +406,14 @@ def main():
             gen_images = pipeline(None) 
         else:
             # TODO: fill pipeline
-            gen_images = pipeline(None) 
+            gen_images = pipeline(
+                batch_size = args.batch_size,
+                num_inference_steps = args.num_inference_steps,
+                guidance_scale=None,
+                generator=generator,
+                device = device,
+                
+            ) 
             
         # create a blank canvas for the grid
         grid_image = Image.new('RGB', (4 * args.image_size, 1 * args.image_size))

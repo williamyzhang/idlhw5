@@ -236,10 +236,11 @@ class DDPMScheduler(nn.Module):
         
         t = timestep
         prev_t = self.previous_timestep(t)
+        # print('Timesteps: ', t, ' prev:', prev_t)
         
         # TODO: 1. compute alphas, betas
         alpha_prod_t = self.alphas_cumprod[t]
-        alpha_prod_t_prev = self.alphas_cumprod[prev_t] if prev_t >= 0 else 1.0
+        alpha_prod_t_prev = self.alphas_cumprod[prev_t] if prev_t >= 0 else torch.tensor(1.0)
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
         current_alpha_t = alpha_prod_t / alpha_prod_t_prev

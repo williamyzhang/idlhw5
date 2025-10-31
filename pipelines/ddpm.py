@@ -65,6 +65,7 @@ class DDPMPipeline:
     ):
         image_shape = (batch_size, self.unet.input_ch, self.unet.input_size, self.unet.input_size)
         if device is None:
+            print('Device not specified, using unet device')
             device = next(self.unet.parameters()).device
         
         # NOTE: this is for CFG
@@ -73,6 +74,7 @@ class DDPMPipeline:
         
         if classes is not None:
             # convert classes to tensor
+            print('Classes are not None:', classes)
             if isinstance(classes, int):
                 classes = [classes] * batch_size
             elif isinstance(classes, list):
@@ -86,9 +88,12 @@ class DDPMPipeline:
             # TODO: get uncon class embeddings
             uncond_embeds = None 
         
+        if guidance_scale is not None:
+            print('Guidance scale is not None:', guidance_scale)
+
         # TODO: starts with random noise
         image = randn_tensor(image_shape, generator=generator, device=device)
-        
+        # print('Initial noise image shape:', image.shape)
 
         # TODO: set step values using set_timesteps of scheduler
         self.scheduler.set_timesteps(num_inference_steps=num_inference_steps, device=device)
@@ -97,11 +102,13 @@ class DDPMPipeline:
         for t in self.progress_bar(self.scheduler.timesteps):
             
             # NOTE: this is for CFG
-            if guidance_scale is not None or guidance_scale != 1.0:
+            if guidance_scale is not None: # or guidance_scale != 1.0:
+                print('Using CFG with guidance scale:', guidance_scale)
                 # TODO: implement cfg
                 model_input = None 
                 c = None 
             else:
+                # print('Image shape:', image.shape)
                 model_input = image
                 # NOTE: leave c as None if you are not using CFG
                 c = None
@@ -109,13 +116,17 @@ class DDPMPipeline:
             # TODO: 1. predict noise model_output
             model_output = self.unet(model_input, t, c)
             
-            if guidance_scale is not None or guidance_scale != 1.0:
+            if guidance_scale is not None: # or guidance_scale != 1.0:
                 # TODO: implement cfg
                 uncond_model_output, cond_model_output = model_output.chunk(2)
                 model_output = None
             
             # TODO: 2. compute previous image: x_t -> x_t-1 using scheduler
-            image = self.scheduler.step(model_output, t, image) 
+            image = self.scheduler.step(
+                model_output=model_output, 
+                timestep=t, 
+                sample=image,
+                generator=generator) 
             
         
         # NOTE: this is for latent DDPM
