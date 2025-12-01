@@ -54,6 +54,7 @@ def main():
     # TODO: ddpm shceduler
     scheduler = DDPMScheduler(
         num_train_timesteps=args.num_train_timesteps,
+        num_inference_steps=args.num_inference_steps,
         beta_start=args.beta_start,
         beta_end=args.beta_end,
         beta_schedule=args.beta_schedule,
@@ -89,6 +90,8 @@ def main():
     # scheduler = scheduler_class(None)
 
     # load checkpoint
+    print("Loading checkpoint from:", args.ckpt)
+    print("checkpoint inference steps:", args.num_inference_steps)
     load_checkpoint(unet, scheduler, vae=vae, class_embedder=class_embedder, checkpoint_path=args.ckpt)
     
     # TODO: pipeline

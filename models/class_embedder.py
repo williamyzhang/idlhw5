@@ -7,7 +7,8 @@ class ClassEmbedder(nn.Module):
         super().__init__()
         
         # TODO: implement the class embeddering layer for CFG using nn.Embedding
-        self.embedding = None 
+        # Add 1 extra class for unconditional generation (null token)
+        self.embedding = nn.Embedding(n_classes + 1, embed_dim)
         self.cond_drop_rate = cond_drop_rate
         self.num_classes = n_classes
 
@@ -16,8 +17,10 @@ class ClassEmbedder(nn.Module):
         
         if self.cond_drop_rate > 0 and self.training:
             # TODO: implement class drop with unconditional class
-            x = None
+            # Randomly replace class labels with the unconditional class (index = n_classes)
+            mask = torch.rand(b, device=x.device) < self.cond_drop_rate
+            x = torch.where(mask, torch.full_like(x, self.num_classes), x)
         
         # TODO: get embedding: N, embed_dim
-        c = None 
+        c = self.embedding(x)
         return c

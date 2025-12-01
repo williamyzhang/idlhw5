@@ -55,7 +55,7 @@ class DDPMScheduler(nn.Module):
         self.register_buffer("alphas_cumprod", alphas_cumprod)
         
         # TODO: timesteps
-        timesteps = torch.arange(num_train_timesteps - 1, -1, -1, dtype=torch.int64)
+        timesteps = torch.arange(num_inference_steps - 1, -1, -1, dtype=torch.int64)
         self.register_buffer("timesteps", timesteps)
         
 

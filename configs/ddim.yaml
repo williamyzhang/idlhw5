@@ -1,4 +1,4 @@
-run_name: ddpm
+run_name: ddim
 seed: 42
 data_dir: ./data
 image_size: 32
