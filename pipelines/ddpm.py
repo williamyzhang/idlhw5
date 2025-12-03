@@ -103,7 +103,7 @@ class DDPMPipeline:
             
             # NOTE: this is for CFG
             if guidance_scale is not None: # or guidance_scale != 1.0:
-                print('Using CFG with guidance scale:', guidance_scale)
+                # print('Using CFG with guidance scale:', guidance_scale)
                 # TODO: implement cfg
                 # Concatenate conditional and unconditional samples
                 model_input = torch.cat([image, image], dim=0)

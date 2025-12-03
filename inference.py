@@ -103,7 +103,7 @@ def main():
     )
 
     
-    logger.info("***** Running Infrence *****")
+    logger.info("***** Running Inference *****")
     
     # TODO: we run inference to generation 5000 images
     # TODO: with cfg, we generate 50 images per class 
