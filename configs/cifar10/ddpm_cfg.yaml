@@ -6,7 +6,7 @@ batch_size: 128
 num_workers: 4
 num_classes: 10
 num_epochs: 100
-learning_rate: 0.0005
+learning_rate: 0.0001
 weight_decay: 0.01
 
 # DDPM settings (standard)
@@ -46,7 +46,7 @@ output_dir: /ocean/projects/cis250283p/wzhang31/experiments/
 
 resume_from_run: exp-1-ddpm_cfg
 resume_from_wandb: 6iojs8bq
-resume_from_checkpoint: /ocean/projects/cis250283p/wzhang31/experiments/exp-1-ddpm_cfg/checkpoints/checkpoint_epoch_23.pth
+resume_from_checkpoint: /ocean/projects/cis250283p/wzhang31/experiments/exp-1-ddpm_cfg/checkpoints/checkpoint_epoch_27.pth
 
 # For inference only
 # ckpt: /path/to/checkpoint.pth
