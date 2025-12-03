@@ -74,7 +74,7 @@ class DDPMPipeline:
         
         if classes is not None:
             # convert classes to tensor
-            print('Classes are not None:', classes)
+            print('Classes:', classes)
             if isinstance(classes, int):
                 classes = [classes] * batch_size
             elif isinstance(classes, list):
@@ -89,7 +89,7 @@ class DDPMPipeline:
             uncond_embeds = self.class_embedder(uncond_classes)
 
         if guidance_scale is not None:
-            print('Guidance scale is not None:', guidance_scale)
+            print('Guidance scale:', guidance_scale)
 
         # TODO: starts with random noise
         image = randn_tensor(image_shape, generator=generator, device=device)
