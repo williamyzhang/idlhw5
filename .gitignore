@@ -1,3 +1,6 @@
 /cifar-10-batches-py
 /wandb
 /experiments
+/pretrained
+/data
+nohup*

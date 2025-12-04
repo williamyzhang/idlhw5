@@ -1,11 +1,11 @@
-run_name: ddim
+run_name: ddpm
 seed: 42
 data_dir: ./data
 image_size: 32
 batch_size: 128 
 num_workers: 4
 num_classes: 10
-num_epochs: 20
+num_epochs: 100
 learning_rate: 0.0005
 weight_decay: 0.01
 num_train_timesteps: 1000
@@ -25,4 +25,7 @@ unet_attn: [2, 3]
 unet_dropout: 0.1
 
 use_cifar10: True
-ckpt: /jet/home/wzhang31/hw5_student_starter_code/experiments/exp-3-ddpm/checkpoints/checkpoint_epoch_19.pth
+
+output_dir: /ocean/projects/cis250283p/wzhang31/experiments/
+
+# ckpt: /jet/home/wzhang31/hw5_student_starter_code/experiments/exp-3-ddpm/checkpoints/checkpoint_epoch_19.pth

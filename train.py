@@ -75,13 +75,19 @@ def parse_args():
     
     # ddim sampler for inference
     parser.add_argument("--use_ddim", type=str2bool, default=False, help="use ddim sampler for inference")
-
+    parser.add_argument("--eta", type=float, default=0.0, help="eta for DDIM sampler (0.0=deterministic, 1.0=stochastic)")
+    
     # use cifar10
     parser.add_argument("--use_cifar10", type=str2bool, default=False, help="use cifar10 for training")
     
     # checkpoint path for inference
     parser.add_argument("--ckpt", type=str, default=None, help="checkpoint path for inference")
     
+    # checkpoint path to resume training
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="checkpoint path to resume training from")
+    parser.add_argument("--resume_from_run", type=str, default=None, help="run name to resume training from")
+    parser.add_argument("--resume_from_wandb", type=str, default=None, help="wandb run ID to resume from")
+
     # first parse of command-line args to check for config file
     args = parser.parse_args()
     
@@ -95,7 +101,38 @@ def parse_args():
     # re-parse command-line args to overwrite with any command-line inputs
     args = parser.parse_args()
     return args
+
+def load_checkpoint(unet, scheduler, vae=None, class_embedder=None, optimizer=None, checkpoint_path='checkpoints/checkpoint.pth'):
     
+    print("loading checkpoint")
+    checkpoint = torch.load(checkpoint_path, weights_only=False)#, weights)
+    
+    print("loading unet")
+    unet.load_state_dict(checkpoint['unet_state_dict'])
+    print("loading scheduler")
+    # Load scheduler state but exclude 'timesteps' which is set dynamically
+    scheduler_state = checkpoint['scheduler_state_dict']
+    if 'timesteps' in scheduler_state:
+        del scheduler_state['timesteps']
+    scheduler.load_state_dict(scheduler_state, strict=False)
+    
+    epoch = checkpoint.get('epoch', 0)
+    # scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    
+    if vae is not None and 'vae_state_dict' in checkpoint:
+        print("loading vae")
+        vae.load_state_dict(checkpoint['vae_state_dict'])
+    
+    if class_embedder is not None and 'class_embedder_state_dict' in checkpoint:
+        print("loading class_embedder")
+        class_embedder.load_state_dict(checkpoint['class_embedder_state_dict'])
+
+    if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+        print("loading optimizer")
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+    print(f"Checkpoint loaded from epoch {epoch}")
+    return epoch
     
 def main():
     
@@ -132,6 +169,8 @@ def main():
     # TODO: use transform to normalize your images to [-1, 1]
     # TODO: you can also use horizontal flip
     transform = transforms.Compose([
+        transforms.Resize((args.image_size, args.image_size)),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
@@ -163,12 +202,18 @@ def main():
     args.total_batch_size = total_batch_size
     
     # setup experiment folder
-    if args.run_name is None:
-        args.run_name = f'exp-{len(os.listdir(args.output_dir))}'
-    else:
-        args.run_name = f'exp-{len(os.listdir(args.output_dir))}-{args.run_name}'
+    if args.resume_from_run is not None:
+        # Resuming from an existing run
+        args.run_name = args.resume_from_run
+        logger.info(f"Resuming run: {args.run_name}")
+    else: 
+        if args.run_name is None:
+            args.run_name = f'exp-{len(os.listdir(args.output_dir))}'
+        else:
+            args.run_name = f'exp-{len(os.listdir(args.output_dir))}-{args.run_name}'
     output_dir = os.path.join(args.output_dir, args.run_name)
     save_dir = os.path.join(output_dir, 'checkpoints')
+    print(f"save dir: {save_dir}")
     os.makedirs(args.output_dir, exist_ok=True)
     if is_primary(args):
         os.makedirs(output_dir, exist_ok=True)
@@ -271,6 +316,20 @@ def main():
         print('No CFG evaluation pipeline')
         pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp)
 
+    # Load checkpoint if resuming training
+    start_epoch = 0
+    if args.resume_from_checkpoint is not None:
+        logger.info(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
+        start_epoch = load_checkpoint(
+            unet=unet_wo_ddp,
+            scheduler=scheduler,
+            vae=vae_wo_ddp,
+            class_embedder=class_embedder_wo_ddp,
+            optimizer=optimizer,
+            checkpoint_path=args.resume_from_checkpoint
+        )
+        start_epoch += 1  # Start from the next epoch
+        logger.info(f"Resuming from epoch {start_epoch}")
     ## pipeline test
     # print('Testing pipeline call...')
     # generator = torch.Generator(device=device)
@@ -283,6 +342,7 @@ def main():
     #         device = device,
     #     ) 
 
+
     # dump config file
     if is_primary(args):
         experiment_config = vars(args)
@@ -293,10 +353,21 @@ def main():
     
     # start tracker
     if is_primary(args):
-        wandb_logger = wandb.init(
-            project='ddpm', 
-            name=args.run_name, 
-            config=vars(args))
+        if args.resume_from_wandb is not None:
+            # Resume existing wandb run with provided ID
+            logger.info(f"Resuming wandb run with ID: {args.resume_from_wandb}")
+            wandb_logger = wandb.init(
+                project='ddpm',
+                name=args.run_name,
+                id=args.resume_from_wandb,
+                resume="must",
+                config=vars(args)
+            )    
+        else:
+            wandb_logger = wandb.init(
+                project='ddpm', 
+                name=args.run_name, 
+                config=vars(args))
     
     # Start training    
     if is_primary(args):
@@ -313,7 +384,7 @@ def main():
     progress_bar = tqdm(range(args.max_train_steps), disable=not is_primary(args))
 
     # training
-    for epoch in range(args.num_epochs):
+    for epoch in range(start_epoch, args.num_epochs):
         
         # set epoch for distributed sampler, this is for distribution training
         if hasattr(train_loader.sampler, 'set_epoch'):
