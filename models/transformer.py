@@ -1,272 +1,211 @@
-import math
-import torch
+import torch 
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import init
+import numpy as np
 
+from  .unet_modules import TimeEmbedding
+from .class_embedder import ClassEmbedder
+
+
+def get_pos_embed_sincos1D(embed_dim, positions):
+   
+
+    T = positions.shape[0]
+    positions = positions.float()
+
+    dim_half = embed_dim // 2
+    # frequencies
+    omega = torch.arange(dim_half, dtype=torch.float32)
+    omega = omega / dim_half
+    omega = 1.0 / (10000 ** omega)  # (dim_half,)
+    out = positions[:, None] * omega[None, :]  # (T, dim_half)
+
+    emb = torch.cat([torch.sin(out), torch.cos(out)], dim=1)  # (T, embed_dim)
+    return emb
 
 def get_pos_embed_sincos2D(grid_size, embed_dim):
-    """Build 2D sine-cosine positional embeddings, non-trainable."""
     h, w = grid_size
+    y, x = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
 
-    grid_h = torch.arange(h, dtype=torch.float32)
-    grid_w = torch.arange(w, dtype=torch.float32)
-    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")
+    y = y.reshape(-1)
+    x = x.reshape(-1)
 
-    pos_dim = embed_dim // 4
     if embed_dim % 4 != 0:
-        raise ValueError("Embed dim must be divisible by 4 for 2D sin-cos embedding.")
+        raise ValueError("Embed dimension must be even")
+    
+    dim_each = embed_dim // 2
 
-    omega = torch.arange(pos_dim, dtype=torch.float32)
-    omega /= pos_dim
-    omega = 1.0 / (10000 ** omega)
+    emb_y = get_pos_embed_sincos1D(dim_each, y)   # (T, D/2)
+    emb_x = get_pos_embed_sincos1D(dim_each, x)
 
-    grid_h = grid_h.flatten()
-    grid_w = grid_w.flatten()
+    pos_embed = torch.cat([emb_y, emb_x], dim=1)  # (T, D)
+    return pos_embed.float()
 
-    out_h = grid_h[:, None] * omega[None, :]
-    out_w = grid_w[:, None] * omega[None, :]
-
-    emb_h = torch.cat([torch.sin(out_h), torch.cos(out_h)], dim=1)
-    emb_w = torch.cat([torch.sin(out_w), torch.cos(out_w)], dim=1)
-
-    pos_embed = torch.cat([emb_h, emb_w], dim=1)
-    return pos_embed
-
-
-class TimestepEmbedder(nn.Module):
-    """Embed scalar timesteps with Fourier features followed by an MLP."""
-
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
-        ).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding
-
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq)
-        return t_emb
-
-
-class LabelEmbedder(nn.Module):
-    """Classifier-free guidance label embedder with token drop."""
-
-    def __init__(self, num_classes, hidden_size, dropout_prob=0.1):
-        super().__init__()
-        use_cfg_embedding = dropout_prob > 0
-        self.embedding_table = nn.Embedding(num_classes + use_cfg_embedding, hidden_size)
-        self.num_classes = num_classes
-        self.dropout_prob = dropout_prob
-
-    def token_drop(self, labels, force_drop_ids=None):
-        if force_drop_ids is None:
-            drop_ids = torch.rand(labels.shape[0], device=labels.device) < self.dropout_prob
-        else:
-            drop_ids = force_drop_ids == 1
-        labels = torch.where(drop_ids, self.num_classes, labels)
-        return labels
-
-    def forward(self, labels, train, force_drop_ids=None):
-        use_dropout = self.dropout_prob > 0
-        if (train and use_dropout) or (force_drop_ids is not None):
-            labels = self.token_drop(labels, force_drop_ids)
-        embeddings = self.embedding_table(labels)
-        return embeddings
-
-
+    
 class PatchEmbed(nn.Module):
-    """Patchify spatial latents into tokens."""
-
-    def __init__(self, img_size=32, patch_size=2, in_chans=3, embed_dim=768):
+    #(B, C, 32, 32) → (B, T, d)
+    def __init__(self, img_size=(32, 32), patch_size=2, in_chans=3, embed_dim=768):
         super().__init__()
-        if isinstance(img_size, int):
-            img_size = (img_size, img_size)
         self.img_size = img_size
         self.patch_size = patch_size
-        self.grid_size = (img_size[0] // patch_size, img_size[1] // patch_size)
-        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.grid_size = img_size // patch_size
+        self.num_patches = self.grid_size ** 2
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, x):
-        x = self.proj(x)
-        x = x.flatten(2).transpose(1, 2)
+    def forward(self, z):
+        
+        x = self.proj(z)  
+        x = x.flatten(2)
+        x = x.transpose(1, 2) 
         return x
+    
 
+class AdaLNZero(nn.Module):
+        def __init__(self, dim):
+            super().__init__()
+            self.norm = nn.LayerNorm(dim, elementwise_affine=False)
+            self.mlp = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(dim, 3 * dim)
+            )
+
+        def forward(self, x, cond):
+        # x:    (B, C, H, W)
+        # cond: (B, C)
+
+        # Produce (γ, β, α)
+            gamma, beta, alpha = self.mlp(cond).chunk(3, dim=-1)
+            gamma = gamma[:, :, None, None]  # (B,C,1,1)
+            beta  = beta[:, :, None, None]
+            alpha = alpha[:, :, None, None]
+
+       
+            x_perm = x.permute(0, 2, 3, 1)       # (B,H,W,C)
+            x_norm = self.norm(x_perm)           # LayerNorm on C
+            x_norm = x_norm.permute(0, 3, 1, 2)  # back to (B,C,H,W)
+
+      
+            return x + alpha * (gamma * x_norm + beta)
 
 class DiTBlock(nn.Module):
-    """Transformer block with adaLN-Zero conditioning."""
-
-    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0):
+    def __init__(self, dim, heads, dropout=0.1):
         super().__init__()
-        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
-        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-
-        mlp_hidden_dim = int(hidden_size * mlp_ratio)
+        self.AdaLN = AdaLNZero(dim)
+        self.AdaLN2 = AdaLNZero(dim)
+        self.norm1 = nn.LayerNorm(dim)
+        self.attn = nn.MultiheadAttention(embed_dim=dim, num_heads=heads, dropout=dropout, batch_first=True)
+        self.norm2 = nn.LayerNorm(dim)
+        
         self.mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden_dim),
+            nn.Linear(dim, 4 * dim),
             nn.GELU(),
-            nn.Linear(mlp_hidden_dim, hidden_size),
+            nn.Linear(4 * dim, dim),
+           
         )
 
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 6 * hidden_size)
-        )
+    def forward(self, x, cond):
+        # x: (B, T, D)
 
-    def forward(self, x, c):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        x = self.AdaLN(x, cond)
+        attn_output, _ = self.attn(x_norm, x_norm, x_norm)
+        x = x + attn_output  
 
-        x_norm = self.norm1(x)
-        x_norm = x_norm * (1 + scale_msa.unsqueeze(1)) + shift_msa.unsqueeze(1)
-        attn_out, _ = self.attn(x_norm, x_norm, x_norm)
-        x = x + gate_msa.unsqueeze(1) * attn_out
-
-        x_norm = self.norm2(x)
-        x_norm = x_norm * (1 + scale_mlp.unsqueeze(1)) + shift_mlp.unsqueeze(1)
-        mlp_out = self.mlp(x_norm)
-        x = x + gate_mlp.unsqueeze(1) * mlp_out
+        x_norm = self.AdaLN2(x, cond)
+        mlp_output = self.mlp(x_norm)
+        x = x + mlp_output
 
         return x
-
-
-class FinalLayer(nn.Module):
-    """Final adaLN + linear projection back to patches."""
-
-    def __init__(self, hidden_size, patch_size, out_channels):
+    
+class ReversePatchEmbed(nn.Module):
+    #(B, T, d) → (B, 2*C, H, W)
+    def __init__(self, img_size=(32, 32), patch_size=2, out_chans=3, embed_dim=768):
         super().__init__()
-        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(hidden_size, patch_size * patch_size * out_channels)
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            nn.Linear(hidden_size, 2 * hidden_size)
-        )
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.H, self.W = img_size
+        self.C = out_chans 
+        self.T = (self.H // patch_size) * (self.W // patch_size)
 
-    def forward(self, x, c):
-        shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
-        x = self.norm_final(x) * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
-        x = self.linear(x)
+        self.proj = nn.Linear(embed_dim, (patch_size ** 2) * self.C * 2)
+
+    def forward(self, x):
+        x =self.proj(x)  # (B, T, patch_size*patch_size*2*C)
+        B, T, _ = x.shape
+        x = x.view(B, T, self.C * 2, self.patch_size, self.patch_size)  # (B, T, 2*C, p, p)
+        x = x.view(B, self.H // self.patch_size, self.W // self.patch_size, self.C * 2, self.patch_size, self.patch_size)  # (B, H//p, W//p, 2*C, p, p)
+        x = x.permute(0, 3, 1, 4, 2, 5)  # (B, 2*C, H//p, p, W//p, p)
+        x = x.reshape(B, self.C * 2, self.H, self.W)  # (B, 2*C, H, W)
+
         return x
-
+    
 
 class DiT(nn.Module):
-    """Diffusion Transformer (DiT) with adaLN-Zero conditioning."""
-
-    def __init__(
-        self,
-        img_size=32,
-        patch_size=2,
-        in_channels=3,
-        hidden_size=768,
-        depth=12,
-        num_heads=12,
-        mlp_ratio=4.0,
-        num_classes=1000,
-        class_dropout_prob=0.1,
-        learn_sigma=True,
-    ):
+    def __init__(self,
+                 embedding_steps,
+                 n_classes,
+                 patch_size = 2,
+                 embed_dim = 768,
+                 depth = 12,
+                 heads = 12,
+                 in_channel = 3,
+                 image_size = (32, 32), 
+                 dropout = 0.1):
         super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = in_channels * 2 if learn_sigma else in_channels
+
+        self.H = image_size[0] // patch_size
+        self.W = image_size[1] // patch_size
+
+        self.in_channel = in_channel
         self.patch_size = patch_size
-        self.learn_sigma = learn_sigma
+        self.embed_dim = embed_dim
 
-        self.x_embedder = PatchEmbed(img_size, patch_size, in_channels, hidden_size)
-        self.t_embedder = TimestepEmbedder(hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, hidden_size, class_dropout_prob)
+        self.timeEmbed = TimeEmbedding(embedding_steps, d_model = embed_dim, dim = embed_dim)
+        self.classEmbed = ClassEmbedder(embed_dim = embed_dim, n_classes = n_classes, cond_drop_rate = 0.1)
+        self.patchEmbed = PatchEmbed(img_size=image_size, patch_size=patch_size, in_chans=in_channel, embed_dim=embed_dim)
 
-        num_patches = self.x_embedder.num_patches
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches, hidden_size), requires_grad=False)
+        #positional embedding
+        pos_embed = get_pos_embed_sincos2D((self.H // patch_size, self.W //patch_size), embed_dim)  # (T, D)
+        self.pos_embed = nn.Parameter(pos_embed.unsqueeze(0), requires_grad=False)  # (1, T, D)
 
-        self.blocks = nn.ModuleList([
-            DiTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio) for _ in range(depth)
+        self.DiTBlocks = nn.ModuleList([
+            DiTBlock(dim=embed_dim, heads=heads, dropout=dropout)
+            for _ in range(depth)
         ])
 
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
-        self.initialize_weights()
+        self.norm = nn.LayerNorm(embed_dim)
+        self.reverseEmbed = ReversePatchEmbed(img_size=image_size, patch_size=patch_size, out_chans=in_channel, embed_dim=embed_dim)
+        
+        self.cond_proj = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim),
+            nn.SiLU(),
+            nn.Linear(embed_dim, embed_dim),
+        )
 
-    def initialize_weights(self):
-        def _basic_init(module):
-            if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-        self.apply(_basic_init)
 
-        pos_embed = get_pos_embed_sincos2D(self.x_embedder.grid_size, self.pos_embed.shape[-1])
-        self.pos_embed.data.copy_(pos_embed.unsqueeze(0))
+    def forward(self, x, t, y):
+        B, C, _, _ = x.shape
 
-        w = self.x_embedder.proj.weight.data
-        nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
-        nn.init.constant_(self.x_embedder.proj.bias, 0)
-
-        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
-        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
-
-        nn.init.normal_(self.y_embedder.embedding_table.weight, std=0.02)
-
-        for block in self.blocks:
-            nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
-            nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
-
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
-        nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
-        nn.init.constant_(self.final_layer.linear.weight, 0)
-        nn.init.constant_(self.final_layer.linear.bias, 0)
-
-    def unpatchify(self, x):
-        """Rearrange patch tokens back to spatial layout."""
-        c = self.out_channels
-        p = self.patch_size
-        h, w = self.x_embedder.grid_size
-        if h * w != x.shape[1]:
-            raise ValueError("Token count does not match patch grid.")
-
-        x = x.reshape(x.shape[0], h, w, p, p, c)
-        x = torch.einsum('nhwpqc->nchpwq', x)
-        imgs = x.reshape(x.shape[0], c, h * p, w * p)
-        return imgs
-
-    def forward(self, x, t, y=None, force_drop_ids=None):
-        # ensure t is a batch-length tensor
         if not torch.is_tensor(t):
-            t = torch.tensor([t], device=x.device, dtype=torch.long)
-        if t.dim() == 0:
-            t = t[None]
-        if t.shape[0] != x.shape[0]:
-            t = t.expand(x.shape[0]).to(x.device)
+            t = torch.tensor([t], dtype=torch.long, device=x.device)
+        elif torch.is_tensor(t) and len(t.shape) == 0:
+            t = t.unsqueeze(0).to(x.device)
+        
+        if t.shape[0] == 1 and B > 1:
+            t = t.expand(B)
+        elif t.shape[0] != B:
+            t = t[:B]
 
-        x = self.x_embedder(x) + self.pos_embed
-        t = self.t_embedder(t)
+        patch_embed = self.patchEmbed(x)
+        time_emb = self.timeEmbed(t)
+        x = patch_embed + self.pos_embed
+        class_emb = self.classEmbed(y)
+        cond = time_emb + class_emb
 
-        if y is not None:
-            y = self.y_embedder(y, self.training, force_drop_ids=force_drop_ids)
-            c = t + y
-        else:
-            c = t
+        for block in self.DiTBlocks:
+            x = block(x, cond)
 
-        for block in self.blocks:
-            x = block(x, c)
-
-        x = self.final_layer(x, c)
-        x = self.unpatchify(x)
-
-        if self.learn_sigma:
-            noise, logvar = x.chunk(2, dim=1)
-            return noise, logvar
-        return x
+        x = self.reverseEmbed(x)
+        noise, logvar = x.chunk(2, dim=1)
+        return noise
