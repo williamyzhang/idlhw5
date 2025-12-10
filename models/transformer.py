@@ -74,22 +74,10 @@ class AdaLNZero(nn.Module):
             )
 
         def forward(self, x, cond):
-        # x:    (B, C, H, W)
-        # cond: (B, C)
-
-        # Produce (γ, β, α)
+            # x: (B, T, D); cond: (B, D)
             gamma, beta, alpha = self.mlp(cond).chunk(3, dim=-1)
-            gamma = gamma[:, :, None, None]  # (B,C,1,1)
-            beta  = beta[:, :, None, None]
-            alpha = alpha[:, :, None, None]
-
-       
-            x_perm = x.permute(0, 2, 3, 1)       # (B,H,W,C)
-            x_norm = self.norm(x_perm)           # LayerNorm on C
-            x_norm = x_norm.permute(0, 3, 1, 2)  # back to (B,C,H,W)
-
-      
-            return x + alpha * (gamma * x_norm + beta)
+            x_norm = self.norm(x)
+            return x + alpha.unsqueeze(1) * (gamma.unsqueeze(1) * x_norm + beta.unsqueeze(1))
 
 class DiTBlock(nn.Module):
     def __init__(self, dim, heads, dropout=0.1):
