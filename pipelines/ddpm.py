@@ -139,8 +139,8 @@ class DDPMPipeline:
         # NOTE: this is for latent DDPM
         # TODO: use VQVAE to get final image
         if self.vae is not None:
-            # NOTE: remember to rescale your images
-            image = image * 2 - 1 
+            # rescale latents back before decoding
+            image = image / 0.1845
             image = self.vae.decode(image)
             # TODO: clamp your images values
             image = image.clamp(-1, 1)
