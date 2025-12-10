@@ -68,6 +68,10 @@ class DDPMPipeline:
             h, w = self.model.x_embedder.img_size
             c = self.model.in_channels
             image_shape = (batch_size, c, h, w)
+        elif hasattr(self.model, "patchEmbed"):
+            h, w = self.model.patchEmbed.img_size
+            c = getattr(self.model, "in_channel", getattr(self.model, "in_channels", None))
+            image_shape = (batch_size, c, h, w)
         else:
             image_shape = (batch_size, self.model.input_ch, self.model.input_size, self.model.input_size)
         if device is None:
