@@ -47,10 +47,12 @@ class PatchEmbed(nn.Module):
     #(B, C, 32, 32) → (B, T, d)
     def __init__(self, img_size=(32, 32), patch_size=2, in_chans=3, embed_dim=768):
         super().__init__()
+        if isinstance(img_size, int):
+            img_size = (img_size, img_size)
         self.img_size = img_size
         self.patch_size = patch_size
-        self.grid_size = img_size // patch_size
-        self.num_patches = self.grid_size ** 2
+        self.grid_size = (img_size[0] // patch_size, img_size[1] // patch_size)
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
 
         self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
 
@@ -108,7 +110,7 @@ class DiTBlock(nn.Module):
     def forward(self, x, cond):
         # x: (B, T, D)
 
-        x = self.AdaLN(x, cond)
+        x_norm = self.AdaLN(x, cond)
         attn_output, _ = self.attn(x_norm, x_norm, x_norm)
         x = x + attn_output  
 
@@ -166,7 +168,7 @@ class DiT(nn.Module):
         self.patchEmbed = PatchEmbed(img_size=image_size, patch_size=patch_size, in_chans=in_channel, embed_dim=embed_dim)
 
         #positional embedding
-        pos_embed = get_pos_embed_sincos2D((self.H // patch_size, self.W //patch_size), embed_dim)  # (T, D)
+        pos_embed = get_pos_embed_sincos2D((self.H, self.W), embed_dim)  # (T, D)
         self.pos_embed = nn.Parameter(pos_embed.unsqueeze(0), requires_grad=False)  # (1, T, D)
 
         self.DiTBlocks = nn.ModuleList([
@@ -208,4 +210,4 @@ class DiT(nn.Module):
 
         x = self.reverseEmbed(x)
         noise, logvar = x.chunk(2, dim=1)
-        return noise
+        return noise, logvar
