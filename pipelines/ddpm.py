@@ -121,8 +121,12 @@ class DDPMPipeline:
                 else:
                     if classes is None:
                         raise ValueError("Provide classes for CFG when no class_embedder is used.")
-                    eps_uncond, _ = self.model(image, t, y=None)
-                    eps_cond, _ = self.model(image, t, y=classes)
+                    eps_uncond = self.model(image, t, y=None)
+                    eps_cond = self.model(image, t, y=classes)
+                    if isinstance(eps_uncond, tuple):
+                        eps_uncond = eps_uncond[0]
+                    if isinstance(eps_cond, tuple):
+                        eps_cond = eps_cond[0]
                     model_output = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
             else:
                 out = self.model(image, t, classes if classes is not None and not hasattr(self, "class_embedder") else None)
