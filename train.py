@@ -66,6 +66,8 @@ def parse_args():
     parser.add_argument("--unet_num_res_blocks", type=int, default=2, help="unet number of res blocks")
     parser.add_argument("--unet_dropout", type=float, default=0.0, help="unet dropout")
 
+    parser.add_argument("--model_type", type=str, default="unet", choices=["unet", "dit"], help="backbone choice")
+
     # DiT
     parser.add_argument("--dit_patch_size", type=int, default=2, help="DiT patch size (latent tokens)")
     parser.add_argument("--dit_hidden_size", type=int, default=768, help="DiT hidden dimension")
@@ -229,14 +231,13 @@ def main():
     
     # setup model
     logger.info("Creating model")
-    # choose DiT for latent DDPM, otherwise UNet fallback
-    if args.latent_ddpm:
-        # latent resolution from current VAE setup (ch_mult=[1,2,4] => downsample x4)
-        latent_img = args.image_size // 4
+    if args.model_type == "dit":
+        latent_img = (args.image_size // 4) if args.latent_ddpm else args.unet_in_size
+        in_ch = 3  # matches current VAE output
         model = DiT(
             img_size=latent_img,
             patch_size=args.dit_patch_size,
-            in_channels=3,  # VAE latents in this project
+            in_channels=in_ch,
             hidden_size=args.dit_hidden_size,
             depth=args.dit_depth,
             num_heads=args.dit_num_heads,
@@ -275,9 +276,8 @@ def main():
         
     # Note: this is for cfg
     class_embedder = None
-    if args.use_cfg:
+    if args.use_cfg and args.model_type != "dit":
         print('Using Class Embedder for CFG')
-        # TODO: 
         class_embedder = ClassEmbedder(
             embed_dim=args.unet_ch, # Should match the embedding dimension expected by UNet
             n_classes=args.num_classes,
@@ -464,7 +464,7 @@ def main():
             noisy_images = scheduler.add_noise(images, noise, timesteps)
             
             # TODO: model prediction
-            if isinstance(model, DiT):
+            if args.model_type == "dit":
                 model_pred = model(noisy_images, timesteps, labels if args.use_cfg else None)
             else:
                 model_pred = model(noisy_images, timesteps, class_emb)

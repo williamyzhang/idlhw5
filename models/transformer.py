@@ -243,6 +243,14 @@ class DiT(nn.Module):
         return imgs
 
     def forward(self, x, t, y=None, force_drop_ids=None):
+        # ensure t is a batch-length tensor
+        if not torch.is_tensor(t):
+            t = torch.tensor([t], device=x.device, dtype=torch.long)
+        if t.dim() == 0:
+            t = t[None]
+        if t.shape[0] != x.shape[0]:
+            t = t.expand(x.shape[0]).to(x.device)
+
         x = self.x_embedder(x) + self.pos_embed
         t = self.t_embedder(t)
 
