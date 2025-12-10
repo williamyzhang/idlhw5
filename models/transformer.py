@@ -190,6 +190,12 @@ class DiT(nn.Module):
         patch_embed = self.patchEmbed(x)
         time_emb = self.timeEmbed(t)
         x = patch_embed + self.pos_embed
+        if y is None:
+            y = torch.full((B,), self.classEmbed.num_classes, device=x.device, dtype=torch.long)
+        elif y.dim() == 0:
+            y = y.unsqueeze(0).to(x.device)
+        else:
+            y = y.to(x.device)
         class_emb = self.classEmbed(y)
         cond = time_emb + class_emb
 
