@@ -2,11 +2,11 @@ from typing import List, Optional, Tuple, Union
 
 import torch 
 import torch.nn as nn 
-import numpy as np
+#import numpy as np
 
 from utils import randn_tensor
 
-from.scheduling_ddpm import DDPMScheduler
+from .scheduling_ddpm import DDPMScheduler
 
 
 class DDIMScheduler(DDPMScheduler):    
@@ -32,16 +32,16 @@ class DDIMScheduler(DDPMScheduler):
         #Equation (16)
         
         # TODO: calculate $beta_t$ for the current timestep using the cumulative product of alphas
-        prev_t = t - 1 if t > 0 else 0
+        idx = (self.timesteps == t).nonzero(as_tuple=True)[0].item()
+        prev_t = self.timesteps[idx + 1] if idx < len(self.timesteps) - 1 else self.timesteps[-1]
+
         alpha_prod_t = self.alphas_cumprod[t]
         alpha_prod_t_prev = self.alphas_cumprod[prev_t]
-        beta_prod_t = 1 - alpha_prod_t
-        beta_prod_t_prev = 1 - alpha_prod_t_prev
+      
 
         # TODO: DDIM equation for variance
         #
-        
-        variance = self.eta * np.sqrt((1 - alpha_prod_t_prev) / (1 - alpha_prod_t) * (1 - alpha_prod_t / alpha_prod_t_prev))
+        variance = torch.sqrt((1 - alpha_prod_t_prev)/(1 - alpha_prod_t) * (1 - alpha_prod_t/alpha_prod_t_prev))
 
         return variance
     
@@ -87,19 +87,20 @@ class DDIMScheduler(DDPMScheduler):
         # - pred_prev_sample -> "x_t-1"
         
         t = timestep
-        prev_t = t - 1 if t > 0 else 0
-        self.eta = eta
+        idx = (self.timesteps == t).nonzero(as_tuple=True)[0].item()
+        prev_t = self.timesteps[idx + 1] if idx < len(self.timesteps) - 1 else self.timesteps[-1]
+        
 
         # TODO: 1. compute alphas, betas
         alpha_prod_t = self.alphas_cumprod[t]
         alpha_prod_t_prev = self.alphas_cumprod[prev_t]
-        beta_prod_t = 1 - alpha_prod_t
+        
 
         # TODO: 2. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (15) from https://arxiv.org/pdf/2006.11239.pdf
         if self.prediction_type == 'epsilon':
             pred_epsilon = model_output
-            pred_original_sample = (sample - torch.sqrt(beta_prod_t) * pred_epsilon) / torch.sqrt(alpha_prod_t)
+            pred_original_sample = (sample - torch.sqrt(1 - alpha_prod_t)  * pred_epsilon) / torch.sqrt(alpha_prod_t)
         else:
             raise NotImplementedError(f"Prediction type {self.prediction_type} not implemented.")
 
@@ -111,15 +112,16 @@ class DDIMScheduler(DDPMScheduler):
 
         # TODO: 4. compute variance: "sigma_t(η)" -> see formula (16)
         # σ_t = sqrt((1 − α_t−1)/(1 − α_t)) * sqrt(1 − α_t/α_t−1)
-        variance = torch.sqrt((1 - alpha_prod_t_prev) / (1 - alpha_prod_t)) * torch.sqrt(1 - alpha_prod_t / alpha_prod_t_prev)
-        std_dev_t = eta * variance
+        
+        std_dev_t = eta * self._get_variance(t)
 
         # TODO: 5. compute "direction pointing to x_t" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
-        pred_sample_direction = torch.sqrt(1 - alpha_prod_t_prev - std_dev_t**2) * pred_epsilon
+        direction_coeff = torch.sqrt(torch.clamp(1 - alpha_prod_t_prev - std_dev_t**2, min=0.0))
+        pred_sample_direction = direction_coeff * pred_epsilon
 
         # TODO: 6. compute x_t without "random noise" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
         prev_sample = torch.sqrt(alpha_prod_t_prev) * pred_original_sample + pred_sample_direction
-
+ 
         # TODO: 7. Add noise with eta
         if eta > 0:
             variance_noise = randn_tensor(
