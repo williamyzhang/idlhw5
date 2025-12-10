@@ -235,16 +235,15 @@ def main():
         latent_img = (args.image_size // 4) if args.latent_ddpm else args.unet_in_size
         in_ch = 3  # matches current VAE output
         model = DiT(
-            img_size=latent_img,
+            embedding_steps=args.num_train_timesteps,
+            n_classes=args.num_classes,
             patch_size=args.dit_patch_size,
-            in_channels=in_ch,
-            hidden_size=args.dit_hidden_size,
+            embed_dim=args.dit_hidden_size,
             depth=args.dit_depth,
-            num_heads=args.dit_num_heads,
-            mlp_ratio=args.dit_mlp_ratio,
-            num_classes=args.num_classes,
-            class_dropout_prob=args.dit_dropout_prob,
-            learn_sigma=True,
+            heads=args.dit_num_heads,
+            in_channel=in_ch,
+            image_size=(latent_img, latent_img),
+            dropout=args.dit_dropout_prob,
         ) 
     else:
         model = UNet(input_size=args.unet_in_size, input_ch=args.unet_in_ch, T=args.num_train_timesteps, ch=args.unet_ch, ch_mult=args.unet_ch_mult, attn=args.unet_attn, num_res_blocks=args.unet_num_res_blocks, dropout=args.unet_dropout, conditional=args.use_cfg, c_dim=args.unet_ch)
