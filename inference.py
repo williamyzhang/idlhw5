@@ -46,7 +46,8 @@ def main():
     # setup model
     logger.info("Creating model")
     if args.latent_ddpm:
-        latent_img = args.unet_in_size // 8
+        # latent resolution from current VAE setup (downsample x4)
+        latent_img = args.unet_in_size // 4
         model = DiT(
             img_size=latent_img,
             patch_size=getattr(args, "dit_patch_size", 2),

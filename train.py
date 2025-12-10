@@ -231,8 +231,8 @@ def main():
     logger.info("Creating model")
     # choose DiT for latent DDPM, otherwise UNet fallback
     if args.latent_ddpm:
-        # latent resolution assumed to be image_size // 8 per DiT paper setup
-        latent_img = args.image_size // 8
+        # latent resolution from current VAE setup (ch_mult=[1,2,4] => downsample x4)
+        latent_img = args.image_size // 4
         model = DiT(
             img_size=latent_img,
             patch_size=args.dit_patch_size,
