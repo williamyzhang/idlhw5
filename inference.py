@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torchvision.utils  import make_grid
 from torchvision import datasets
 
-from models import UNet, VAE, ClassEmbedder
+from models import UNet, VAE, ClassEmbedder, DiT
 from schedulers import DDPMScheduler, DDIMScheduler
 from pipelines import DDPMPipeline
 from utils import seed_everything, load_checkpoint
@@ -45,10 +45,24 @@ def main():
 
     # setup model
     logger.info("Creating model")
-    # unet
-    unet = UNet(input_size=args.unet_in_size, input_ch=args.unet_in_ch, T=args.num_train_timesteps, ch=args.unet_ch, ch_mult=args.unet_ch_mult, attn=args.unet_attn, num_res_blocks=args.unet_num_res_blocks, dropout=args.unet_dropout, conditional=args.use_cfg, c_dim=args.unet_ch)
-    # preint number of parameters
-    num_params = sum(p.numel() for p in unet.parameters() if p.requires_grad)
+    if args.latent_ddpm:
+        latent_img = args.unet_in_size // 8
+        model = DiT(
+            img_size=latent_img,
+            patch_size=getattr(args, "dit_patch_size", 2),
+            in_channels=4,
+            hidden_size=getattr(args, "dit_hidden_size", 768),
+            depth=getattr(args, "dit_depth", 12),
+            num_heads=getattr(args, "dit_num_heads", 12),
+            mlp_ratio=getattr(args, "dit_mlp_ratio", 4.0),
+            num_classes=args.num_classes,
+            class_dropout_prob=0.1,
+            learn_sigma=True,
+        )
+    else:
+        model = UNet(input_size=args.unet_in_size, input_ch=args.unet_in_ch, T=args.num_train_timesteps, ch=args.unet_ch, ch_mult=args.unet_ch_mult, attn=args.unet_attn, num_res_blocks=args.unet_num_res_blocks, dropout=args.unet_dropout, conditional=args.use_cfg, c_dim=args.unet_ch)
+    # print number of parameters
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Number of parameters: {num_params / 10 ** 6:.2f}M")
     
     # TODO: ddpm shceduler
@@ -69,12 +83,11 @@ def main():
         vae.eval()
     # cfg
     class_embedder = None
-    if args.use_cfg:
-        # TODO: class embeder
-        class_embedder = ClassEmbedder(None)
+    if args.use_cfg and not args.latent_ddpm:
+        class_embedder = ClassEmbedder(embed_dim=args.unet_ch, n_classes=args.num_classes, cond_drop_rate=0.1)
         
     # send to device
-    unet = unet.to(device)
+    model = model.to(device)
     scheduler = scheduler.to(device)
     if vae:
         vae = vae.to(device)
@@ -92,11 +105,11 @@ def main():
     # load checkpoint
     print("Loading checkpoint from:", args.ckpt)
     print("checkpoint inference steps:", args.num_inference_steps)
-    load_checkpoint(unet, scheduler, vae=vae, class_embedder=class_embedder, checkpoint_path=args.ckpt)
+    load_checkpoint(model, scheduler, vae=vae, class_embedder=class_embedder, checkpoint_path=args.ckpt)
     
     # TODO: pipeline
     pipeline = DDPMPipeline(
-        unet=unet,
+        model=model,
         scheduler=scheduler,
         vae=vae,
         class_embedder=class_embedder,

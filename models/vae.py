@@ -6,6 +6,7 @@ from .vae_modules import Encoder, Decoder
 from .vae_distributions import DiagonalGaussianDistribution
 
 
+
 class VAE(nn.Module):
     # NOTE: do not change anything in __init__ function
     def __init__(self,

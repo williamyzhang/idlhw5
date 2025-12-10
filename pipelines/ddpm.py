@@ -9,8 +9,9 @@ from utils import randn_tensor
 
 
 class DDPMPipeline:
-    def __init__(self, unet, scheduler, vae=None, class_embedder=None):
-        self.unet = unet
+    def __init__(self, model, scheduler, vae=None, class_embedder=None):
+        # model can be UNet or DiT
+        self.model = model
         self.scheduler = scheduler
         
         # NOTE: this is for latent DDPM
@@ -63,10 +64,15 @@ class DDPMPipeline:
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         device = None,
     ):
-        image_shape = (batch_size, self.unet.input_ch, self.unet.input_size, self.unet.input_size)
+        if hasattr(self.model, "x_embedder"):
+            h, w = self.model.x_embedder.img_size
+            c = self.model.in_channels
+            image_shape = (batch_size, c, h, w)
+        else:
+            image_shape = (batch_size, self.model.input_ch, self.model.input_size, self.model.input_size)
         if device is None:
-            print('Device not specified, using unet device')
-            device = next(self.unet.parameters()).device
+            print('Device not specified, using model device')
+            device = next(self.model.parameters()).device
         
         # NOTE: this is for CFG
         if classes is not None or guidance_scale is not None:
@@ -81,12 +87,10 @@ class DDPMPipeline:
                 assert len(classes) == batch_size, "Length of classes must be equal to batch_size"
                 classes = torch.tensor(classes, device=device)
             
-            # TODO: get uncond classes
-            uncond_classes = torch.full((batch_size,), self.class_embedder.num_classes, device=device) 
-            # TODO: get class embeddings from classes
-            class_embeds = self.class_embedder(classes)
-            # TODO: get uncon class embeddings
-            uncond_embeds = self.class_embedder(uncond_classes)
+            if hasattr(self, "class_embedder"):
+                uncond_classes = torch.full((batch_size,), self.class_embedder.num_classes, device=device) 
+                class_embeds = self.class_embedder(classes)
+                uncond_embeds = self.class_embedder(uncond_classes)
 
         if guidance_scale is not None:
             print('Guidance scale:', guidance_scale)
@@ -101,28 +105,23 @@ class DDPMPipeline:
         # TODO: inverse diffusion process with for loop
         for t in self.progress_bar(self.scheduler.timesteps):
             
-            # NOTE: this is for CFG
-            if guidance_scale is not None: # or guidance_scale != 1.0:
-                # print('Using CFG with guidance scale:', guidance_scale)
-                # TODO: implement cfg
-                # Concatenate conditional and unconditional samples
-                model_input = torch.cat([image, image], dim=0)
-                # Concatenate unconditional and conditional embeddings
-                c = torch.cat([uncond_embeds, class_embeds], dim=0)
+            # model prediction with optional CFG
+            if guidance_scale is not None:
+                if hasattr(self, "class_embedder"):
+                    model_input = torch.cat([image, image], dim=0)
+                    c = torch.cat([uncond_embeds, class_embeds], dim=0)
+                    model_output = self.model(model_input, t, c)
+                    uncond_model_output, cond_model_output = model_output.chunk(2)
+                    model_output = uncond_model_output + guidance_scale * (cond_model_output - uncond_model_output)
+                else:
+                    eps_uncond, _ = self.model(image, t, y=None)
+                    eps_cond, _ = self.model(image, t, y=classes)
+                    model_output = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
             else:
-                # print('Image shape:', image.shape)
-                model_input = image
-                # NOTE: leave c as None if you are not using CFG
-                c = None
-            
-            # TODO: 1. predict noise model_output
-            model_output = self.unet(model_input, t, c)
-            
-            if guidance_scale is not None: # or guidance_scale != 1.0:
-                # TODO: implement cfg
-                uncond_model_output, cond_model_output = model_output.chunk(2)
-                # Apply classifier-free guidance formula
-                model_output = uncond_model_output + guidance_scale * (cond_model_output - uncond_model_output)
+                out = self.model(image, t, classes if classes is not None and not hasattr(self, "class_embedder") else None)
+                if isinstance(out, tuple):
+                    out = out[0]
+                model_output = out
             
             # TODO: 2. compute previous image: x_t -> x_t-1 using scheduler
             image = self.scheduler.step(

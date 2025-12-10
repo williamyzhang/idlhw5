@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torchvision import datasets, transforms
 from torchvision.utils  import make_grid
 
-from models import UNet, VAE, ClassEmbedder
+from models import UNet, VAE, ClassEmbedder, DiT
 from schedulers import DDPMScheduler, DDIMScheduler
 from pipelines import DDPMPipeline
 from utils import seed_everything, init_distributed_device, is_primary, AverageMeter, str2bool, save_checkpoint
@@ -65,6 +65,14 @@ def parse_args():
     parser.add_argument("--unet_attn", type=int, default=[1, 2, 3], nargs='+', help="unet attantion stage index")
     parser.add_argument("--unet_num_res_blocks", type=int, default=2, help="unet number of res blocks")
     parser.add_argument("--unet_dropout", type=float, default=0.0, help="unet dropout")
+
+    # DiT
+    parser.add_argument("--dit_patch_size", type=int, default=2, help="DiT patch size (latent tokens)")
+    parser.add_argument("--dit_hidden_size", type=int, default=768, help="DiT hidden dimension")
+    parser.add_argument("--dit_depth", type=int, default=12, help="DiT depth")
+    parser.add_argument("--dit_num_heads", type=int, default=12, help="DiT attention heads")
+    parser.add_argument("--dit_mlp_ratio", type=float, default=4.0, help="DiT MLP ratio")
+    parser.add_argument("--dit_dropout_prob", type=float, default=0.1, help="CFG token drop prob inside DiT")
     
     # vae
     parser.add_argument("--latent_ddpm", type=str2bool, default=False, help="use vqvae for latent ddpm")
@@ -221,10 +229,26 @@ def main():
     
     # setup model
     logger.info("Creating model")
-    # unet
-    unet = UNet(input_size=args.unet_in_size, input_ch=args.unet_in_ch, T=args.num_train_timesteps, ch=args.unet_ch, ch_mult=args.unet_ch_mult, attn=args.unet_attn, num_res_blocks=args.unet_num_res_blocks, dropout=args.unet_dropout, conditional=args.use_cfg, c_dim=args.unet_ch)
-    # preint number of parameters
-    num_params = sum(p.numel() for p in unet.parameters() if p.requires_grad)
+    # choose DiT for latent DDPM, otherwise UNet fallback
+    if args.latent_ddpm:
+        # latent resolution assumed to be image_size // 8 per DiT paper setup
+        latent_img = args.image_size // 8
+        model = DiT(
+            img_size=latent_img,
+            patch_size=args.dit_patch_size,
+            in_channels=4,  # VAE latents
+            hidden_size=args.dit_hidden_size,
+            depth=args.dit_depth,
+            num_heads=args.dit_num_heads,
+            mlp_ratio=args.dit_mlp_ratio,
+            num_classes=args.num_classes,
+            class_dropout_prob=args.dit_dropout_prob,
+            learn_sigma=True,
+        )
+    else:
+        model = UNet(input_size=args.unet_in_size, input_ch=args.unet_in_ch, T=args.num_train_timesteps, ch=args.unet_ch, ch_mult=args.unet_ch_mult, attn=args.unet_attn, num_res_blocks=args.unet_num_res_blocks, dropout=args.unet_dropout, conditional=args.use_cfg, c_dim=args.unet_ch)
+    # print number of parameters
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Number of parameters: {num_params / 10 ** 6:.2f}M")
     
     # TODO: ddpm shceduler
@@ -261,7 +285,7 @@ def main():
         )
         
     # send to device
-    unet = unet.to(device)
+    model = model.to(device)
     scheduler = scheduler.to(device)
     if vae:
         vae = vae.to(device)
@@ -273,22 +297,22 @@ def main():
     args.max_train_steps = args.num_epochs * num_update_steps_per_epoch
     
     # TODO: setup optimizer
-    optimizer = torch.optim.AdamW(unet.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     # TODO: setup scheduler
     # Note: not sure what scheduler to set up here
     # scheduler = None
 
     #  setup distributed training
     if args.distributed:
-        unet = torch.nn.parallel.DistributedDataParallel(
-            unet, device_ids=[args.device], output_device=args.device, find_unused_parameters=False)
-        unet_wo_ddp = unet.module
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[args.device], output_device=args.device, find_unused_parameters=False)
+        model_wo_ddp = model.module
         if class_embedder:
             class_embedder = torch.nn.parallel.DistributedDataParallel(
                 class_embedder, device_ids=[args.device], output_device=args.device, find_unused_parameters=False)
             class_embedder_wo_ddp = class_embedder.module
     else:
-        unet_wo_ddp = unet
+        model_wo_ddp = model
         class_embedder_wo_ddp = class_embedder
     vae_wo_ddp = vae
     # TODO: setup ddim
@@ -311,17 +335,17 @@ def main():
     # TODO: setup evaluation pipeline
     # NOTE: this pipeline is not differentiable and only for evaluatin
     if args.use_cfg:
-        pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp, class_embedder=class_embedder_wo_ddp)
+        pipeline = DDPMPipeline(model=model_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp, class_embedder=class_embedder_wo_ddp)
     else:
         print('No CFG evaluation pipeline')
-        pipeline = DDPMPipeline(unet=unet_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp)
+        pipeline = DDPMPipeline(model=model_wo_ddp, scheduler=scheduler_wo_ddp, vae=vae_wo_ddp)
 
     # Load checkpoint if resuming training
     start_epoch = 0
     if args.resume_from_checkpoint is not None:
         logger.info(f"Resuming training from checkpoint: {args.resume_from_checkpoint}")
         start_epoch = load_checkpoint(
-            unet=unet_wo_ddp,
+            unet=model_wo_ddp,
             scheduler=scheduler,
             vae=vae_wo_ddp,
             class_embedder=class_embedder_wo_ddp,
@@ -397,8 +421,8 @@ def main():
         
         loss_m = AverageMeter()
         
-        # TODO: set unet and scheduelr to train
-        unet = unet.train()
+        # TODO: set model and scheduler to train
+        model = model.train()
         scheduler = scheduler.train()
         
         
@@ -440,7 +464,14 @@ def main():
             noisy_images = scheduler.add_noise(images, noise, timesteps)
             
             # TODO: model prediction
-            model_pred = unet(noisy_images, timesteps, class_emb)
+            if isinstance(model, DiT):
+                model_pred = model(noisy_images, timesteps, labels if args.use_cfg else None)
+            else:
+                model_pred = model(noisy_images, timesteps, class_emb)
+
+            # DiT returns (noise, logvar) when learn_sigma=True
+            if isinstance(model_pred, tuple):
+                model_pred = model_pred[0]
 
             if args.prediction_type == 'epsilon':
                 target = noise 
@@ -455,7 +486,7 @@ def main():
             loss.backward()
             # TODO: grad clip
             if args.grad_clip:
-                torch.nn.utils.clip_grad_norm_(unet.parameters(), args.grad_clip)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
             
             # TODO: step your optimizer
             optimizer.step()
@@ -469,7 +500,7 @@ def main():
 
         # validation
         # send unet to evaluation mode
-        unet.eval()        
+        model.eval()        
         generator = torch.Generator(device=device)
         generator.manual_seed(epoch + args.seed)
         
@@ -508,10 +539,8 @@ def main():
         # Send to wandb
         if is_primary(args):
             wandb_logger.log({'gen_images': wandb.Image(grid_image)})
-            
-        # save checkpoint
-        if is_primary(args):
-            save_checkpoint(unet_wo_ddp, scheduler_wo_ddp, vae_wo_ddp, class_embedder, optimizer, epoch, save_dir=save_dir)
+            # save checkpoint
+            save_checkpoint(model_wo_ddp, scheduler_wo_ddp, vae_wo_ddp, class_embedder, optimizer, epoch, save_dir=save_dir)
 
     # only save 1 for the last epoch
     # if is_primary(args):
