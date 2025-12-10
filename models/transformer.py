@@ -118,15 +118,15 @@ class ReversePatchEmbed(nn.Module):
         self.C = out_chans 
         self.T = (self.H // patch_size) * (self.W // patch_size)
 
-        self.proj = nn.Linear(embed_dim, (patch_size ** 2) * self.C * 2)
+        self.proj = nn.Linear(embed_dim, (patch_size ** 2) * self.C)
 
     def forward(self, x):
-        x =self.proj(x)  # (B, T, patch_size*patch_size*2*C)
+        x = self.proj(x)  # (B, T, patch_size*patch_size*2*C)
         B, T, _ = x.shape
-        x = x.view(B, T, self.C * 2, self.patch_size, self.patch_size)  # (B, T, 2*C, p, p)
-        x = x.view(B, self.H // self.patch_size, self.W // self.patch_size, self.C * 2, self.patch_size, self.patch_size)  # (B, H//p, W//p, 2*C, p, p)
-        x = x.permute(0, 3, 1, 4, 2, 5)  # (B, 2*C, H//p, p, W//p, p)
-        x = x.reshape(B, self.C * 2, self.H, self.W)  # (B, 2*C, H, W)
+        x = x.view(B, T, self.C, self.patch_size, self.patch_size)  # (B, T, C, p, p)
+        x = x.view(B, self.H // self.patch_size, self.W // self.patch_size, self.C, self.patch_size, self.patch_size)
+        x = x.permute(0, 3, 1, 4, 2, 5)  # (B, C, H//p, p, W//p, p)
+        x = x.reshape(B, self.C, self.H, self.W)  # (B, C, H, W)
 
         return x
     
@@ -203,5 +203,4 @@ class DiT(nn.Module):
             x = block(x, cond)
 
         x = self.reverseEmbed(x)
-        noise, logvar = x.chunk(2, dim=1)
-        return noise, logvar
+        return x

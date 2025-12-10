@@ -97,8 +97,10 @@ class DDPMPipeline:
         if guidance_scale is not None:
             print('Guidance scale:', guidance_scale)
 
-        # TODO: starts with random noise
+        # TODO: starts with random noise (scale to match training if using latent VAE)
         image = randn_tensor(image_shape, generator=generator, device=device)
+        if self.vae is not None:
+            image = image * 0.18215
         # print('Initial noise image shape:', image.shape)
 
         # TODO: set step values using set_timesteps of scheduler
@@ -140,7 +142,7 @@ class DDPMPipeline:
         # TODO: use VQVAE to get final image
         if self.vae is not None:
             # rescale latents back before decoding
-            image = image / 0.1845
+            image = image / 0.18215
             image = self.vae.decode(image)
             # TODO: clamp your images values
             image = image.clamp(-1, 1)

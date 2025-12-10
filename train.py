@@ -439,8 +439,8 @@ def main():
             if vae is not None:
                 # use vae to encode images as latents
                 images = vae.encode(images) 
-                # NOTE: do not change  this line, this is to ensure the latent has unit std
-                images = images * 0.1845
+                # NOTE: scale to match VAE latent std
+                images = images * 0.18215
             
             # TODO: zero grad optimizer
             optimizer.zero_grad()
