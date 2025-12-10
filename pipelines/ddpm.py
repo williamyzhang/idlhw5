@@ -74,10 +74,6 @@ class DDPMPipeline:
             print('Device not specified, using model device')
             device = next(self.model.parameters()).device
         
-        # NOTE: this is for CFG
-        if classes is not None or guidance_scale is not None:
-            assert hasattr(self, "class_embedder"), "class_embedder is not defined"
-        
         if classes is not None:
             # convert classes to tensor
             print('Classes:', classes)
@@ -86,7 +82,9 @@ class DDPMPipeline:
             elif isinstance(classes, list):
                 assert len(classes) == batch_size, "Length of classes must be equal to batch_size"
                 classes = torch.tensor(classes, device=device)
-            
+            else:
+                classes = classes.to(device)
+
             if hasattr(self, "class_embedder"):
                 uncond_classes = torch.full((batch_size,), self.class_embedder.num_classes, device=device) 
                 class_embeds = self.class_embedder(classes)
@@ -104,6 +102,7 @@ class DDPMPipeline:
         
         # TODO: inverse diffusion process with for loop
         for t in self.progress_bar(self.scheduler.timesteps):
+            t = t.to(device)
             
             # model prediction with optional CFG
             if guidance_scale is not None:
@@ -114,6 +113,8 @@ class DDPMPipeline:
                     uncond_model_output, cond_model_output = model_output.chunk(2)
                     model_output = uncond_model_output + guidance_scale * (cond_model_output - uncond_model_output)
                 else:
+                    if classes is None:
+                        raise ValueError("Provide classes for CFG when no class_embedder is used.")
                     eps_uncond, _ = self.model(image, t, y=None)
                     eps_cond, _ = self.model(image, t, y=classes)
                     model_output = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
