@@ -26,6 +26,7 @@ class VAE(nn.Module):
         self.decoder = Decoder(in_channels=in_channels, ch=ch, out_ch=out_ch, num_res_blocks=num_res_blocks, z_channels=z_channels, ch_mult=ch_mult, resolution=resolution, double_z=double_z, attn_resolutions=[])
         self.quant_conv = torch.nn.Conv2d(2*z_channels, 2*embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(embed_dim, z_channels, 1)
+        self.embed_dim = embed_dim
 
     @torch.no_grad()
     def encode(self, x):

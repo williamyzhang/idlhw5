@@ -236,7 +236,7 @@ def main():
         model = DiT(
             img_size=latent_img,
             patch_size=args.dit_patch_size,
-            in_channels=4,  # VAE latents
+            in_channels=3,  # VAE latents in this project
             hidden_size=args.dit_hidden_size,
             depth=args.dit_depth,
             num_heads=args.dit_num_heads,

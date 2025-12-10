@@ -50,7 +50,7 @@ def main():
         model = DiT(
             img_size=latent_img,
             patch_size=getattr(args, "dit_patch_size", 2),
-            in_channels=4,
+            in_channels=3,
             hidden_size=getattr(args, "dit_hidden_size", 768),
             depth=getattr(args, "dit_depth", 12),
             num_heads=getattr(args, "dit_num_heads", 12),
