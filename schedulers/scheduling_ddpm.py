@@ -45,6 +45,16 @@ class DDPMScheduler(nn.Module):
             # This is the DDPM implementation
             betas = torch.linspace(beta_start, beta_end, num_train_timesteps, dtype=torch.float32)
             # In the paper it is made to grow linearly from 𝛽1 = 10−4 to 𝛽𝑇 = 0.02 for 𝑇 = 1000
+        elif self.beta_schedule == 'cosine':
+            # Cosine schedule from Improved DDPM paper
+            def alpha_bar(t):
+                return torch.cos((t + 0.008) / 1.008 * torch.pi / 2) ** 2
+            
+            timesteps_array = torch.linspace(0, num_train_timesteps, num_train_timesteps + 1, dtype=torch.float32)
+            alphas_cumprod = alpha_bar(timesteps_array / num_train_timesteps)
+            betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+            betas = torch.clip(betas, 0.0001, 0.9999)
+            
         self.register_buffer("betas", betas)
          
         # TODO: calculate alphas
